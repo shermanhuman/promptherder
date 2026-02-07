@@ -27,7 +27,6 @@ func main() {
 
 	var (
 		repoPath    string
-		sourceName  string
 		includeCSV  string
 		dryRun      bool
 		verbose     bool
@@ -35,7 +34,6 @@ func main() {
 	)
 
 	flag.StringVar(&repoPath, "repo", ".", "Path to repo root (default: current directory)")
-	flag.StringVar(&sourceName, "source", "antigravity", "Source of truth: antigravity|agent")
 	flag.StringVar(&includeCSV, "include", "", "Comma-separated glob patterns to include (default: all)")
 	flag.BoolVar(&dryRun, "dry-run", false, "Show actions without writing files")
 	flag.BoolVar(&verbose, "v", false, "Verbose logging")
@@ -56,7 +54,6 @@ func main() {
 	include := parseIncludePatterns(includeCSV)
 	cfg := app.Config{
 		RepoPath: repoPath,
-		Source:   sourceName,
 		Include:  include,
 		DryRun:   dryRun,
 		Logger:   logger,

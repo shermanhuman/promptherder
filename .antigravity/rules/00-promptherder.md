@@ -1,6 +1,14 @@
 # promptherder
 
-Go CLI that syncs Antigravity agent rules/skills between `.antigravity/` (source of truth) and `.agent/` (tool‑read location).
+Go CLI that fans out agent instructions from `.antigravity/rules/` (source of truth) to the file locations that Gemini and VS Code Copilot actually read.
+
+## Targets
+
+| Target | Output |
+|---|---|
+| Gemini | `GEMINI.md` — all rules concatenated |
+| Copilot (repo‑wide) | `.github/copilot-instructions.md` — rules without `applyTo` |
+| Copilot (path‑scoped) | `.github/instructions/<name>.instructions.md` — rules with `applyTo` frontmatter |
 
 ## Project rules
 
@@ -9,13 +17,13 @@ Go CLI that syncs Antigravity agent rules/skills between `.antigravity/` (source
 - Atomic file writes: temp → chmod → rename (see `internal/files/atomic.go`).
 - All I/O functions accept `context.Context`.
 - Errors: wrap with `fmt.Errorf("context: %w", err)`.
-- No Copilot concepts in this codebase — Antigravity‑only mappings.
+- Source files may have optional YAML frontmatter with `applyTo` field.
 
 ## Structure
 
 ```
 cmd/promptherder/main.go   — entry point, flag parsing, ldflags version
-internal/app/sync.go       — mappings, plan builder, file sync
+internal/app/sync.go       — source reading, frontmatter parsing, plan builder, fan‑out
 internal/files/atomic.go   — atomic writer
 ```
 
@@ -23,7 +31,7 @@ internal/files/atomic.go   — atomic writer
 
 - `go test ./... -count=1` — run all tests.
 - Use `t.TempDir()` for filesystem tests.
-- Test both mapping directions (`antigravity` and `agent` sources).
+- Test frontmatter parsing (with/without `applyTo`), plan building, and end‑to‑end sync.
 
 ## Build
 

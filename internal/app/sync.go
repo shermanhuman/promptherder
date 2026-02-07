@@ -1,12 +1,15 @@
 package app
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -16,20 +19,37 @@ import (
 
 var ErrValidation = errors.New("validation error")
 
+const (
+	sourceDir      = ".antigravity/rules"
+	geminiTarget   = "GEMINI.md"
+	copilotTarget  = ".github/copilot-instructions.md"
+	copilotInstDir = ".github/instructions"
+)
+
+// Config controls a sync run.
 type Config struct {
 	RepoPath string
-	Source   string
 	Include  []string
 	DryRun   bool
 	Logger   *slog.Logger
 }
 
-type mapping struct {
-	Name       string
-	SourceRoot string
-	TargetRoot string
+// sourceFile represents a parsed rule from .antigravity/rules/.
+type sourceFile struct {
+	Path    string // absolute path
+	Name    string // stem without extension, e.g. "00-breakdown-infra"
+	ApplyTo string // from frontmatter; empty means repo-wide
+	Body    []byte // content after frontmatter is stripped
 }
 
+// planItem represents a single output file to write.
+type planItem struct {
+	Target  string
+	Content []byte
+	Sources []string // names, for logging
+}
+
+// Run reads .antigravity/rules/ and fans out to Gemini and Copilot targets.
 func Run(ctx context.Context, cfg Config) error {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -37,49 +57,57 @@ func Run(ctx context.Context, cfg Config) error {
 	if strings.TrimSpace(cfg.RepoPath) == "" {
 		return fmt.Errorf("repo path: %w", ErrValidation)
 	}
-	if strings.TrimSpace(cfg.Source) == "" {
-		return fmt.Errorf("source: %w", ErrValidation)
-	}
 
 	repoPath, err := filepath.Abs(cfg.RepoPath)
 	if err != nil {
 		return fmt.Errorf("resolve repo path: %w", err)
 	}
 
-	plan, err := buildPlan(repoPath, cfg.Source, cfg.Include)
+	sources, err := readSources(repoPath, cfg.Include)
 	if err != nil {
 		return err
 	}
 
-	cfg.Logger.Info("plan", "source", cfg.Source, "files", len(plan))
+	if len(sources) == 0 {
+		cfg.Logger.Info("no source files found", "dir", sourceDir)
+		return nil
+	}
+
+	plan := buildPlan(repoPath, sources)
+
+	cfg.Logger.Info("plan", "sources", len(sources), "outputs", len(plan))
 	for _, item := range plan {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
 		if cfg.DryRun {
-			cfg.Logger.Info("dry-run", "copy", item.Source, "to", item.Target)
+			cfg.Logger.Info("dry-run", "target", item.Target, "sources", item.Sources)
 			continue
 		}
 
-		if err := copyFile(item.Source, item.Target); err != nil {
+		if err := writeFile(item.Target, item.Content); err != nil {
 			return err
 		}
-		cfg.Logger.Info("synced", "source", item.Source, "target", item.Target)
+		cfg.Logger.Info("synced", "target", item.Target, "sources", item.Sources)
 	}
 
 	return nil
 }
 
-type planItem struct {
-	Source string
-	Target string
-}
+// readSources discovers and parses all rule files under .antigravity/rules/.
+func readSources(repoPath string, include []string) ([]sourceFile, error) {
+	root := filepath.Join(repoPath, filepath.FromSlash(sourceDir))
 
-func buildPlan(repoPath, source string, include []string) ([]planItem, error) {
-	mappings, err := mappingsFor(source)
+	info, err := os.Stat(root)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("check source dir %s: %w", root, err)
+	}
+	if !info.IsDir() {
+		return nil, nil
 	}
 
 	includes := include
@@ -87,84 +115,183 @@ func buildPlan(repoPath, source string, include []string) ([]planItem, error) {
 		includes = []string{"**/*"}
 	}
 
-	var plan []planItem
-	for _, m := range mappings {
-		root := filepath.Join(repoPath, filepath.FromSlash(m.SourceRoot))
-		info, err := os.Stat(root)
+	var matches []string
+	for _, inc := range includes {
+		pattern := filepath.ToSlash(inc)
+		found, err := doublestar.Glob(os.DirFS(root), pattern)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, fmt.Errorf("check source root %s: %w", root, err)
+			return nil, fmt.Errorf("glob %s: %w", inc, err)
 		}
+		matches = append(matches, found...)
+	}
 
-		if !info.IsDir() {
+	sort.Strings(matches)
+	matches = dedupeStrings(matches)
+
+	var sources []sourceFile
+	for _, match := range matches {
+		absPath := filepath.Join(root, filepath.FromSlash(match))
+		if isDirectory(absPath) {
 			continue
 		}
 
-		for _, inc := range includes {
-			pattern := filepath.ToSlash(inc)
-			matches, err := doublestar.Glob(os.DirFS(root), pattern)
-			if err != nil {
-				return nil, fmt.Errorf("glob %s: %w", inc, err)
-			}
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", absPath, err)
+		}
 
-			for _, match := range matches {
-				if strings.HasSuffix(match, "/") {
-					continue
-				}
-				src := filepath.Join(root, filepath.FromSlash(match))
-				if isDirectory(src) {
-					continue
-				}
-				targetRoot := filepath.Join(repoPath, filepath.FromSlash(m.TargetRoot))
-				target := filepath.Join(targetRoot, filepath.FromSlash(match))
-				plan = append(plan, planItem{Source: src, Target: target})
-			}
+		applyTo, body := parseFrontmatter(data)
+		name := strings.TrimSuffix(filepath.Base(match), filepath.Ext(match))
+
+		sources = append(sources, sourceFile{
+			Path:    absPath,
+			Name:    name,
+			ApplyTo: applyTo,
+			Body:    body,
+		})
+	}
+
+	return sources, nil
+}
+
+// buildPlan creates output plan items for both target systems.
+//
+// Targets:
+//
+//	GEMINI.md                                    ← ALL sources concatenated
+//	.github/copilot-instructions.md              ← sources WITHOUT applyTo
+//	.github/instructions/<name>.instructions.md  ← each source WITH applyTo
+func buildPlan(repoPath string, sources []sourceFile) []planItem {
+	var plan []planItem
+
+	// 1. GEMINI.md — ALL sources concatenated.
+	var geminiParts [][]byte
+	var geminiSources []string
+	for _, s := range sources {
+		geminiParts = append(geminiParts, s.Body)
+		geminiSources = append(geminiSources, s.Name)
+	}
+	plan = append(plan, planItem{
+		Target: filepath.Join(repoPath, geminiTarget),
+		Content: concatWithHeader(
+			"# Auto-generated by promptherder from .antigravity/rules/\n# Do not edit — changes will be overwritten on next sync.\n",
+			geminiParts,
+		),
+		Sources: geminiSources,
+	})
+
+	// 2. .github/copilot-instructions.md — sources WITHOUT applyTo.
+	var copilotParts [][]byte
+	var copilotSources []string
+	for _, s := range sources {
+		if s.ApplyTo == "" {
+			copilotParts = append(copilotParts, s.Body)
+			copilotSources = append(copilotSources, s.Name)
+		}
+	}
+	if len(copilotParts) > 0 {
+		plan = append(plan, planItem{
+			Target: filepath.Join(repoPath, filepath.FromSlash(copilotTarget)),
+			Content: concatWithHeader(
+				"<!-- Auto-generated by promptherder from .antigravity/rules/ — do not edit -->\n",
+				copilotParts,
+			),
+			Sources: copilotSources,
+		})
+	}
+
+	// 3. .github/instructions/<name>.instructions.md — each source WITH applyTo.
+	for _, s := range sources {
+		if s.ApplyTo == "" {
+			continue
+		}
+
+		header := fmt.Sprintf("---\napplyTo: %q\n---\n<!-- Auto-generated by promptherder from .antigravity/rules/%s.md — do not edit -->\n",
+			s.ApplyTo, s.Name)
+
+		var buf bytes.Buffer
+		buf.WriteString(header)
+		buf.WriteByte('\n')
+		buf.Write(bytes.TrimSpace(s.Body))
+		buf.WriteByte('\n')
+
+		plan = append(plan, planItem{
+			Target:  filepath.Join(repoPath, filepath.FromSlash(copilotInstDir), s.Name+".instructions.md"),
+			Content: buf.Bytes(),
+			Sources: []string{s.Name},
+		})
+	}
+
+	return plan
+}
+
+// parseFrontmatter extracts the applyTo value from YAML frontmatter.
+// Returns the applyTo value (empty if none) and the body after frontmatter.
+func parseFrontmatter(data []byte) (applyTo string, body []byte) {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+
+	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) != "---" {
+		return "", data
+	}
+
+	var fmLines []string
+	closed := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "---" {
+			closed = true
+			break
+		}
+		fmLines = append(fmLines, line)
+	}
+
+	if !closed {
+		return "", data
+	}
+
+	for _, line := range fmLines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "applyTo:") {
+			val := strings.TrimPrefix(line, "applyTo:")
+			val = strings.TrimSpace(val)
+			val = strings.Trim(val, `"'`)
+			applyTo = val
 		}
 	}
 
-	return dedupePlan(plan), nil
-}
-
-// mappingsFor returns the file sync mappings for a given source of truth.
-//
-// "antigravity" (default): .antigravity/ is the canonical source.
-//
-//	Rules  → .agent/rules/  (where Antigravity actually reads them)
-//	Skills → .agent/skills/ (where Antigravity actually reads them)
-//
-// "agent": .agent/ is the canonical source, syncs back to .antigravity/.
-func mappingsFor(source string) ([]mapping, error) {
-	key := strings.ToLower(strings.TrimSpace(source))
-	switch key {
-	case "antigravity":
-		return []mapping{
-			{Name: "rules", SourceRoot: ".antigravity/rules", TargetRoot: ".agent/rules"},
-			{Name: "skills", SourceRoot: ".antigravity/skills", TargetRoot: ".agent/skills"},
-		}, nil
-	case "agent":
-		return []mapping{
-			{Name: "rules", SourceRoot: ".agent/rules", TargetRoot: ".antigravity/rules"},
-			{Name: "skills", SourceRoot: ".agent/skills", TargetRoot: ".antigravity/skills"},
-		}, nil
-	default:
-		return nil, fmt.Errorf("unknown source %q (valid: antigravity, agent): %w", source, ErrValidation)
-	}
-}
-
-func copyFile(source, target string) error {
-	data, err := os.ReadFile(source)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", source, err)
+	var bodyBuf bytes.Buffer
+	for scanner.Scan() {
+		bodyBuf.WriteString(scanner.Text())
+		bodyBuf.WriteByte('\n')
 	}
 
+	return applyTo, bodyBuf.Bytes()
+}
+
+// concatWithHeader joins body parts with a leading header comment.
+func concatWithHeader(header string, parts [][]byte) []byte {
+	var buf bytes.Buffer
+	buf.WriteString(header)
+	buf.WriteByte('\n')
+
+	for i, part := range parts {
+		if i > 0 {
+			buf.WriteByte('\n')
+		}
+		buf.Write(bytes.TrimSpace(part))
+		buf.WriteByte('\n')
+	}
+
+	return buf.Bytes()
+}
+
+func writeFile(target string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", target, err)
 	}
 
 	writer := files.AtomicWriter{Path: target, Perm: 0o644}
-	if err := writer.Write(data); err != nil {
+	if err := writer.Write(content); err != nil {
 		return fmt.Errorf("write %s: %w", target, err)
 	}
 
@@ -179,19 +306,14 @@ func isDirectory(path string) bool {
 	return info.IsDir()
 }
 
-func dedupePlan(items []planItem) []planItem {
-	seen := make(map[string]planItem, len(items))
-	order := make([]string, 0, len(items))
+func dedupeStrings(items []string) []string {
+	seen := make(map[string]bool, len(items))
+	result := make([]string, 0, len(items))
 	for _, item := range items {
-		if _, exists := seen[item.Target]; !exists {
-			order = append(order, item.Target)
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
 		}
-		seen[item.Target] = item
-	}
-
-	result := make([]planItem, 0, len(order))
-	for _, key := range order {
-		result = append(result, seen[key])
 	}
 	return result
 }

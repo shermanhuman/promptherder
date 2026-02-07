@@ -1,233 +1,249 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestMappingsFor_Antigravity(t *testing.T) {
-	m, err := mappingsFor("antigravity")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(m) != 2 {
-		t.Fatalf("expected 2 mappings, got %d", len(m))
-	}
+// --- parseFrontmatter ---
 
-	assertMapping(t, m[0], "rules", ".antigravity/rules", ".agent/rules")
-	assertMapping(t, m[1], "skills", ".antigravity/skills", ".agent/skills")
-}
+func TestParseFrontmatter_WithApplyTo(t *testing.T) {
+	input := []byte("---\napplyTo: \"**/*.sh\"\n---\n# Shell rules\n\nDo the thing.\n")
+	applyTo, body := parseFrontmatter(input)
 
-func TestMappingsFor_Agent(t *testing.T) {
-	m, err := mappingsFor("agent")
-	if err != nil {
-		t.Fatal(err)
+	if applyTo != "**/*.sh" {
+		t.Errorf("applyTo = %q, want %q", applyTo, "**/*.sh")
 	}
-	if len(m) != 2 {
-		t.Fatalf("expected 2 mappings, got %d", len(m))
+	if !bytes.Contains(body, []byte("# Shell rules")) {
+		t.Errorf("body missing expected content: %q", body)
 	}
-
-	assertMapping(t, m[0], "rules", ".agent/rules", ".antigravity/rules")
-	assertMapping(t, m[1], "skills", ".agent/skills", ".antigravity/skills")
-}
-
-func TestMappingsFor_CaseInsensitive(t *testing.T) {
-	for _, name := range []string{"Antigravity", "ANTIGRAVITY", " antigravity "} {
-		m, err := mappingsFor(name)
-		if err != nil {
-			t.Errorf("mappingsFor(%q) unexpected error: %v", name, err)
-			continue
-		}
-		if len(m) != 2 {
-			t.Errorf("mappingsFor(%q) expected 2 mappings, got %d", name, len(m))
-		}
+	if bytes.Contains(body, []byte("applyTo")) {
+		t.Error("body should not contain frontmatter")
 	}
 }
 
-func TestMappingsFor_Unknown(t *testing.T) {
-	_, err := mappingsFor("copilot")
-	if err == nil {
-		t.Fatal("expected error for unknown source")
+func TestParseFrontmatter_WithoutFrontmatter(t *testing.T) {
+	input := []byte("# Just a doc\n\nNo frontmatter here.\n")
+	applyTo, body := parseFrontmatter(input)
+
+	if applyTo != "" {
+		t.Errorf("applyTo = %q, want empty", applyTo)
+	}
+	if !bytes.Equal(body, input) {
+		t.Errorf("body should equal input verbatim")
 	}
 }
 
-func TestBuildPlan_Basic(t *testing.T) {
+func TestParseFrontmatter_UnclosedFrontmatter(t *testing.T) {
+	input := []byte("---\napplyTo: \"**/*.yaml\"\n# No closing delimiter\n")
+	applyTo, body := parseFrontmatter(input)
+
+	if applyTo != "" {
+		t.Errorf("unclosed frontmatter should return empty applyTo, got %q", applyTo)
+	}
+	if !bytes.Equal(body, input) {
+		t.Error("unclosed frontmatter should return original data as body")
+	}
+}
+
+func TestParseFrontmatter_SingleQuotes(t *testing.T) {
+	input := []byte("---\napplyTo: '**/*.yaml'\n---\n# Content\n")
+	applyTo, _ := parseFrontmatter(input)
+
+	if applyTo != "**/*.yaml" {
+		t.Errorf("applyTo = %q, want %q", applyTo, "**/*.yaml")
+	}
+}
+
+func TestParseFrontmatter_NoQuotes(t *testing.T) {
+	input := []byte("---\napplyTo: **/*.yaml\n---\n# Content\n")
+	applyTo, _ := parseFrontmatter(input)
+
+	if applyTo != "**/*.yaml" {
+		t.Errorf("applyTo = %q, want %q", applyTo, "**/*.yaml")
+	}
+}
+
+func TestParseFrontmatter_EmptyFile(t *testing.T) {
+	applyTo, body := parseFrontmatter([]byte{})
+	if applyTo != "" {
+		t.Errorf("applyTo = %q, want empty", applyTo)
+	}
+	if len(body) != 0 {
+		t.Errorf("body should be empty, got %q", body)
+	}
+}
+
+// --- readSources ---
+
+func TestReadSources_Basic(t *testing.T) {
 	dir := t.TempDir()
-
-	// Create source structure: .antigravity/rules/00-foo.md
 	rulesDir := filepath.Join(dir, ".antigravity", "rules")
-	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(rulesDir, "00-foo.md"), []byte("# Foo"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, rulesDir)
 
-	plan, err := buildPlan(dir, "antigravity", nil)
+	mustWrite(t, filepath.Join(rulesDir, "00-general.md"), "# General\n\nBe good.\n")
+	mustWrite(t, filepath.Join(rulesDir, "01-shell.md"), "---\napplyTo: \"**/*.sh\"\n---\n# Shell\n\nSafe bash.\n")
+
+	sources, err := readSources(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if len(plan) != 1 {
-		t.Fatalf("expected 1 plan item, got %d", len(plan))
+	if len(sources) != 2 {
+		t.Fatalf("expected 2 sources, got %d", len(sources))
 	}
 
-	want := filepath.Join(dir, ".agent", "rules", "00-foo.md")
-	if plan[0].Target != want {
-		t.Errorf("target = %q, want %q", plan[0].Target, want)
+	// Sorted by filename
+	if sources[0].Name != "00-general" {
+		t.Errorf("sources[0].Name = %q, want %q", sources[0].Name, "00-general")
+	}
+	if sources[0].ApplyTo != "" {
+		t.Errorf("sources[0].ApplyTo = %q, want empty", sources[0].ApplyTo)
+	}
+	if sources[1].Name != "01-shell" {
+		t.Errorf("sources[1].Name = %q, want %q", sources[1].Name, "01-shell")
+	}
+	if sources[1].ApplyTo != "**/*.sh" {
+		t.Errorf("sources[1].ApplyTo = %q, want %q", sources[1].ApplyTo, "**/*.sh")
 	}
 }
 
-func TestBuildPlan_MultipleMappings(t *testing.T) {
+func TestReadSources_MissingDir(t *testing.T) {
 	dir := t.TempDir()
-
-	// Rules
-	rulesDir := filepath.Join(dir, ".antigravity", "rules")
-	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(rulesDir, "rule.md"), []byte("rule"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Skills
-	skillsDir := filepath.Join(dir, ".antigravity", "skills", "deploy")
-	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(skillsDir, "SKILL.md"), []byte("skill"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	plan, err := buildPlan(dir, "antigravity", nil)
+	sources, err := readSources(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(sources) != 0 {
+		t.Fatalf("expected 0 sources, got %d", len(sources))
+	}
+}
 
+func TestReadSources_IncludeFilter(t *testing.T) {
+	dir := t.TempDir()
+	rulesDir := filepath.Join(dir, ".antigravity", "rules")
+	mustMkdir(t, rulesDir)
+
+	mustWrite(t, filepath.Join(rulesDir, "keep.md"), "# Keep\n")
+	mustWrite(t, filepath.Join(rulesDir, "skip.txt"), "skip\n")
+
+	sources, err := readSources(dir, []string{"**/*.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 {
+		t.Fatalf("expected 1 source, got %d", len(sources))
+	}
+	if sources[0].Name != "keep" {
+		t.Errorf("name = %q, want %q", sources[0].Name, "keep")
+	}
+}
+
+// --- buildPlan ---
+
+func TestBuildPlan_AllRepoWide(t *testing.T) {
+	repoPath := "/repo"
+	sources := []sourceFile{
+		{Name: "00-general", Body: []byte("# General\n")},
+		{Name: "01-ops", Body: []byte("# Ops\n")},
+	}
+
+	plan := buildPlan(repoPath, sources)
+
+	// Should produce 2 items: GEMINI.md + copilot-instructions.md
 	if len(plan) != 2 {
 		t.Fatalf("expected 2 plan items, got %d", len(plan))
 	}
 
-	targets := make(map[string]bool, len(plan))
-	for _, item := range plan {
-		targets[item.Target] = true
-	}
+	assertTarget(t, plan[0], filepath.Join(repoPath, "GEMINI.md"))
+	assertTarget(t, plan[1], filepath.Join(repoPath, ".github", "copilot-instructions.md"))
 
-	wantRule := filepath.Join(dir, ".agent", "rules", "rule.md")
-	wantSkill := filepath.Join(dir, ".agent", "skills", "deploy", "SKILL.md")
+	// GEMINI.md should contain both
+	assertContains(t, plan[0].Content, "# General")
+	assertContains(t, plan[0].Content, "# Ops")
 
-	if !targets[wantRule] {
-		t.Errorf("missing target %q", wantRule)
-	}
-	if !targets[wantSkill] {
-		t.Errorf("missing target %q", wantSkill)
-	}
+	// copilot-instructions.md should also contain both
+	assertContains(t, plan[1].Content, "# General")
+	assertContains(t, plan[1].Content, "# Ops")
 }
 
-func TestBuildPlan_IncludeFilter(t *testing.T) {
-	dir := t.TempDir()
-
-	rulesDir := filepath.Join(dir, ".antigravity", "rules")
-	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(rulesDir, "keep.md"), []byte("keep"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(rulesDir, "skip.txt"), []byte("skip"), 0o644); err != nil {
-		t.Fatal(err)
+func TestBuildPlan_WithApplyTo(t *testing.T) {
+	repoPath := "/repo"
+	sources := []sourceFile{
+		{Name: "00-general", Body: []byte("# General\n")},
+		{Name: "01-shell", ApplyTo: "**/*.sh", Body: []byte("# Shell\n")},
 	}
 
-	plan, err := buildPlan(dir, "antigravity", []string{"**/*.md"})
-	if err != nil {
-		t.Fatal(err)
+	plan := buildPlan(repoPath, sources)
+
+	// GEMINI.md + copilot-instructions.md + 01-shell.instructions.md = 3
+	if len(plan) != 3 {
+		t.Fatalf("expected 3 plan items, got %d", len(plan))
 	}
 
-	if len(plan) != 1 {
-		t.Fatalf("expected 1 plan item, got %d", len(plan))
-	}
-	wantTarget := filepath.Join(dir, ".agent", "rules", "keep.md")
-	if plan[0].Target != wantTarget {
-		t.Errorf("target = %q, want %q", plan[0].Target, wantTarget)
-	}
+	// GEMINI.md gets ALL sources
+	assertTarget(t, plan[0], filepath.Join(repoPath, "GEMINI.md"))
+	assertContains(t, plan[0].Content, "# General")
+	assertContains(t, plan[0].Content, "# Shell")
+
+	// copilot-instructions.md gets only repo-wide (no applyTo)
+	assertTarget(t, plan[1], filepath.Join(repoPath, ".github", "copilot-instructions.md"))
+	assertContains(t, plan[1].Content, "# General")
+	assertNotContains(t, plan[1].Content, "# Shell")
+
+	// 01-shell.instructions.md gets its own file with frontmatter
+	assertTarget(t, plan[2], filepath.Join(repoPath, ".github", "instructions", "01-shell.instructions.md"))
+	assertContains(t, plan[2].Content, `applyTo: "**/*.sh"`)
+	assertContains(t, plan[2].Content, "# Shell")
 }
 
-func TestBuildPlan_MissingSource(t *testing.T) {
-	dir := t.TempDir()
-	// No .antigravity/ directory exists — should return empty plan, not error
-	plan, err := buildPlan(dir, "antigravity", nil)
-	if err != nil {
-		t.Fatal(err)
+func TestBuildPlan_AllWithApplyTo(t *testing.T) {
+	repoPath := "/repo"
+	sources := []sourceFile{
+		{Name: "00-yaml", ApplyTo: "**/*.yaml", Body: []byte("# YAML\n")},
+		{Name: "01-shell", ApplyTo: "**/*.sh", Body: []byte("# Shell\n")},
 	}
-	if len(plan) != 0 {
-		t.Fatalf("expected 0 plan items, got %d", len(plan))
+
+	plan := buildPlan(repoPath, sources)
+
+	// GEMINI.md + 2 instruction files = 3 (no copilot-instructions.md since all have applyTo)
+	if len(plan) != 3 {
+		t.Fatalf("expected 3 plan items, got %d", len(plan))
 	}
+
+	assertTarget(t, plan[0], filepath.Join(repoPath, "GEMINI.md"))
+	assertTarget(t, plan[1], filepath.Join(repoPath, ".github", "instructions", "00-yaml.instructions.md"))
+	assertTarget(t, plan[2], filepath.Join(repoPath, ".github", "instructions", "01-shell.instructions.md"))
 }
 
-func TestBuildPlan_ReverseDirection(t *testing.T) {
-	dir := t.TempDir()
-
-	agentDir := filepath.Join(dir, ".agent", "rules")
-	if err := os.MkdirAll(agentDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(agentDir, "rule.md"), []byte("rule"), 0o644); err != nil {
-		t.Fatal(err)
+func TestBuildPlan_GeneratedHeaders(t *testing.T) {
+	repoPath := "/repo"
+	sources := []sourceFile{
+		{Name: "00-general", Body: []byte("# Rules\n")},
 	}
 
-	plan, err := buildPlan(dir, "agent", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	plan := buildPlan(repoPath, sources)
 
-	if len(plan) != 1 {
-		t.Fatalf("expected 1 plan item, got %d", len(plan))
-	}
-
-	want := filepath.Join(dir, ".antigravity", "rules", "rule.md")
-	if plan[0].Target != want {
-		t.Errorf("target = %q, want %q", plan[0].Target, want)
-	}
+	assertContains(t, plan[0].Content, "Auto-generated by promptherder")
+	assertContains(t, plan[0].Content, "Do not edit")
+	assertContains(t, plan[1].Content, "Auto-generated by promptherder")
+	assertContains(t, plan[1].Content, "do not edit")
 }
 
-func TestDedupePlan_PreservesOrder(t *testing.T) {
-	items := []planItem{
-		{Source: "a", Target: "x"},
-		{Source: "b", Target: "y"},
-		{Source: "c", Target: "x"}, // duplicate target, should overwrite first
-	}
-
-	result := dedupePlan(items)
-
-	if len(result) != 2 {
-		t.Fatalf("expected 2 items, got %d", len(result))
-	}
-	// Order preserved: "x" first, "y" second. Source for "x" is "c" (last write wins).
-	if result[0].Target != "x" || result[0].Source != "c" {
-		t.Errorf("result[0] = %+v, want {Source:c, Target:x}", result[0])
-	}
-	if result[1].Target != "y" || result[1].Source != "b" {
-		t.Errorf("result[1] = %+v, want {Source:b, Target:y}", result[1])
-	}
-}
+// --- Run integration ---
 
 func TestRun_DryRun(t *testing.T) {
 	dir := t.TempDir()
-
 	rulesDir := filepath.Join(dir, ".antigravity", "rules")
-	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(rulesDir, "00-test.md"), []byte("# Test"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, rulesDir)
+	mustWrite(t, filepath.Join(rulesDir, "00-test.md"), "# Test\n")
 
 	cfg := Config{
 		RepoPath: dir,
-		Source:   "antigravity",
 		DryRun:   true,
 		Logger:   slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	}
@@ -236,28 +252,21 @@ func TestRun_DryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Target should NOT exist in dry-run mode
-	target := filepath.Join(dir, ".agent", "rules", "00-test.md")
-	if _, err := os.Stat(target); !os.IsNotExist(err) {
-		t.Error("dry-run should not create target files")
+	// Nothing should be written in dry-run
+	if _, err := os.Stat(filepath.Join(dir, "GEMINI.md")); !os.IsNotExist(err) {
+		t.Error("dry-run should not create GEMINI.md")
 	}
 }
 
 func TestRun_ActualSync(t *testing.T) {
 	dir := t.TempDir()
-
 	rulesDir := filepath.Join(dir, ".antigravity", "rules")
-	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	content := []byte("# Test Rule\n\nDo the thing.\n")
-	if err := os.WriteFile(filepath.Join(rulesDir, "00-test.md"), content, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, rulesDir)
+	mustWrite(t, filepath.Join(rulesDir, "00-general.md"), "# General\n\nBe good.\n")
+	mustWrite(t, filepath.Join(rulesDir, "01-shell.md"), "---\napplyTo: \"**/*.sh\"\n---\n# Shell\n\nSafe bash.\n")
 
 	cfg := Config{
 		RepoPath: dir,
-		Source:   "antigravity",
 		DryRun:   false,
 		Logger:   slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	}
@@ -266,45 +275,121 @@ func TestRun_ActualSync(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	target := filepath.Join(dir, ".agent", "rules", "00-test.md")
-	got, err := os.ReadFile(target)
+	// Check GEMINI.md
+	gemini, err := os.ReadFile(filepath.Join(dir, "GEMINI.md"))
 	if err != nil {
-		t.Fatalf("target not created: %v", err)
+		t.Fatalf("GEMINI.md not created: %v", err)
 	}
-	if string(got) != string(content) {
-		t.Errorf("content mismatch: got %q, want %q", got, content)
+	if !bytes.Contains(gemini, []byte("# General")) || !bytes.Contains(gemini, []byte("# Shell")) {
+		t.Error("GEMINI.md should contain all rules")
+	}
+
+	// Check copilot-instructions.md
+	copilot, err := os.ReadFile(filepath.Join(dir, ".github", "copilot-instructions.md"))
+	if err != nil {
+		t.Fatalf("copilot-instructions.md not created: %v", err)
+	}
+	if !bytes.Contains(copilot, []byte("# General")) {
+		t.Error("copilot-instructions.md should contain repo-wide rules")
+	}
+	if bytes.Contains(copilot, []byte("# Shell")) {
+		t.Error("copilot-instructions.md should NOT contain applyTo rules")
+	}
+
+	// Check .github/instructions/01-shell.instructions.md
+	inst, err := os.ReadFile(filepath.Join(dir, ".github", "instructions", "01-shell.instructions.md"))
+	if err != nil {
+		t.Fatalf("01-shell.instructions.md not created: %v", err)
+	}
+	if !bytes.Contains(inst, []byte(`applyTo: "**/*.sh"`)) {
+		t.Error("instruction file should have applyTo frontmatter")
+	}
+	if !bytes.Contains(inst, []byte("# Shell")) {
+		t.Error("instruction file should contain shell rules body")
 	}
 }
 
-func TestRun_ValidationErrors(t *testing.T) {
-	tests := []struct {
-		name string
-		cfg  Config
-	}{
-		{"empty repo path", Config{RepoPath: "", Source: "antigravity"}},
-		{"empty source", Config{RepoPath: "/tmp", Source: ""}},
+func TestRun_NoSources(t *testing.T) {
+	dir := t.TempDir()
+
+	cfg := Config{
+		RepoPath: dir,
+		Logger:   slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
-			err := Run(context.Background(), tt.cfg)
-			if err == nil {
-				t.Fatal("expected validation error")
-			}
-		})
+	if err := Run(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "GEMINI.md")); !os.IsNotExist(err) {
+		t.Error("should not create files when no sources exist")
 	}
 }
 
-func assertMapping(t *testing.T, m mapping, name, source, target string) {
+func TestRun_ValidationError(t *testing.T) {
+	cfg := Config{
+		RepoPath: "",
+		Logger:   slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "repo path") {
+		t.Errorf("error = %q, want repo path validation", err)
+	}
+}
+
+// --- dedupeStrings ---
+
+func TestDedupeStrings(t *testing.T) {
+	input := []string{"a", "b", "a", "c", "b"}
+	result := dedupeStrings(input)
+
+	if len(result) != 3 {
+		t.Fatalf("expected 3, got %d", len(result))
+	}
+	want := "a,b,c"
+	got := strings.Join(result, ",")
+	if got != want {
+		t.Errorf("result = %q, want %q", got, want)
+	}
+}
+
+// --- helpers ---
+
+func mustMkdir(t *testing.T, path string) {
 	t.Helper()
-	if m.Name != name {
-		t.Errorf("name = %q, want %q", m.Name, name)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if m.SourceRoot != source {
-		t.Errorf("source = %q, want %q", m.SourceRoot, source)
+}
+
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if m.TargetRoot != target {
-		t.Errorf("target = %q, want %q", m.TargetRoot, target)
+}
+
+func assertTarget(t *testing.T, item planItem, want string) {
+	t.Helper()
+	if item.Target != want {
+		t.Errorf("target = %q, want %q", item.Target, want)
+	}
+}
+
+func assertContains(t *testing.T, data []byte, substr string) {
+	t.Helper()
+	if !bytes.Contains(data, []byte(substr)) {
+		t.Errorf("expected content to contain %q, got:\n%s", substr, data)
+	}
+}
+
+func assertNotContains(t *testing.T, data []byte, substr string) {
+	t.Helper()
+	if bytes.Contains(data, []byte(substr)) {
+		t.Errorf("expected content NOT to contain %q, got:\n%s", substr, data)
 	}
 }
