@@ -1,5 +1,7 @@
 # promptherder
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Syncs Antigravity agent rules/skills from a source-of-truth directory (`.antigravity/`) to the locations where tools actually read them (`.agent/`).
 
 ## Why
@@ -57,5 +59,5 @@ go build -ldflags "-X main.Version=$VERSION -X main.Commit=$COMMIT -X main.Build
 ## Install
 
 ```bash
-go install github.com/breakdown-analytics/promptherder/cmd/promptherder@latest
+go install github.com/shermanhuman/promptherder/cmd/promptherder@latest
 ```

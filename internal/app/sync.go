@@ -11,7 +11,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
-	"github.com/breakdown-analytics/promptherder/internal/files"
+	"github.com/shermanhuman/promptherder/internal/files"
 )
 
 var ErrValidation = errors.New("validation error")

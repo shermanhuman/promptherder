@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/breakdown-analytics/promptherder/internal/app"
+	"github.com/shermanhuman/promptherder/internal/app"
 )
 
 // Set via ldflags at build time.

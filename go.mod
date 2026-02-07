@@ -1,4 +1,4 @@
-module github.com/breakdown-analytics/promptherder
+module github.com/shermanhuman/promptherder
 
 go 1.25
 
