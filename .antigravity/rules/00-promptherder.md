@@ -5,6 +5,7 @@ Go CLI that syncs Antigravity agent rules/skills between `.antigravity/` (source
 ## Project rules
 
 - **Go 1.25**, single external dependency: `github.com/bmatcuk/doublestar/v4`.
+- Module path: `github.com/shermanhuman/promptherder`.
 - Atomic file writes: temp → chmod → rename (see `internal/files/atomic.go`).
 - All I/O functions accept `context.Context`.
 - Errors: wrap with `fmt.Errorf("context: %w", err)`.
