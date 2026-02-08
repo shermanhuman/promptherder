@@ -1,6 +1,6 @@
 ---
 name: compound-v-parallel
-description: Analyzes task dependencies and groups independent steps into parallel batches. Use when executing multi-step plans or performing research across multiple sources.
+description: Analyzes task dependencies and groups independent steps into parallel batches using waitForPreviousTools. Use when executing multi-step plans or performing research across multiple sources.
 ---
 
 # Parallel Execution Skill
@@ -21,12 +21,18 @@ description: Analyzes task dependencies and groups independent steps into parall
    - No overlap? → **parallel**.
 3. Group independent steps into **batches**.
 
+## Execution pattern
+
+- **Batch 1:** Fire all independent calls with `waitForPreviousTools: false`.
+- **Batch 2:** After Batch 1 completes, fire the next group that depended on Batch 1.
+- Continue until all steps are done.
+
 ## Examples of parallelizable work
 
-- Multiple web searches for different topics
-- Multiple file reads on different files
-- Multiple file writes for unrelated files
-- Multiple commands that don't depend on each other
+- Multiple `search_web` calls for different topics
+- Multiple `view_file` / `view_file_outline` calls on different files
+- Multiple `write_to_file` calls for unrelated files
+- Multiple `run_command` calls that don't depend on each other
 
 ## When NOT to parallelize
 

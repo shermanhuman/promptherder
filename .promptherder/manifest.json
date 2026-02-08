@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated_at": "2026-02-08T19:55:38Z",
+  "generated_at": "2026-02-08T20:45:04Z",
   "targets": {
     "antigravity": [
       ".agent/rules/browser.md",
@@ -21,6 +21,7 @@
       ".promptherder/agent/rules/compound-v.md",
       ".promptherder/agent/skills/README.md",
       ".promptherder/agent/skills/compound-v-debug/SKILL.md",
+      ".promptherder/agent/skills/compound-v-parallel/ANTIGRAVITY.md",
       ".promptherder/agent/skills/compound-v-parallel/SKILL.md",
       ".promptherder/agent/skills/compound-v-plan/SKILL.md",
       ".promptherder/agent/skills/compound-v-review/SKILL.md",

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -47,9 +48,31 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 			return fmt.Errorf("rel path: %w", err)
 		}
 		relSlash := filepath.ToSlash(rel)
+		baseName := filepath.Base(rel)
+		sourceSlash := relSlash // preserve original for logging
+
+		// --- Skill variant logic ---
+		// If this file is in a skills/*/ directory, apply variant selection.
+		if isInSkillDir(relSlash) {
+			if targetName, isVariant := SkillVariantFiles[baseName]; isVariant {
+				if targetName != "antigravity" {
+					// Skip other targets' variant files (e.g. COPILOT.md).
+					return nil
+				}
+				// This is our variant — install it as SKILL.md.
+				rel = filepath.Join(filepath.Dir(rel), "SKILL.md")
+				relSlash = filepath.ToSlash(rel)
+			} else if baseName == "SKILL.md" {
+				// Check if our variant file exists; if so, skip the generic.
+				variantPath := filepath.Join(filepath.Dir(path), "ANTIGRAVITY.md")
+				if _, err := os.Stat(variantPath); err == nil {
+					cfg.Logger.Info("skipping generic skill (variant exists)", "file", relSlash)
+					return nil
+				}
+			}
+		}
 
 		// Skip agent-generated files (e.g. stack.md, structure.md).
-		baseName := filepath.Base(rel)
 		if m.isGenerated(baseName) {
 			targetPath := filepath.Join(cfg.RepoPath, antigravityTarget, rel)
 			if _, err := os.Stat(targetPath); err == nil {
@@ -69,12 +92,12 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 		targetRel := filepath.ToSlash(filepath.Join(antigravityTarget, relSlash))
 
 		if cfg.DryRun {
-			cfg.Logger.Info("dry-run", "target", targetRel, "source", relSlash)
+			cfg.Logger.Info("dry-run", "target", targetRel, "source", sourceSlash)
 		} else {
 			if err := writeFile(targetPath, data); err != nil {
 				return err
 			}
-			cfg.Logger.Info("synced", "target", targetRel, "source", relSlash)
+			cfg.Logger.Info("synced", "target", targetRel, "source", sourceSlash)
 		}
 
 		installed = append(installed, targetRel)
@@ -82,4 +105,10 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 	})
 
 	return installed, err
+}
+
+// isInSkillDir returns true if the slash-separated relative path is inside a
+// skills/*/ directory (e.g. "skills/compound-v-tdd/SKILL.md").
+func isInSkillDir(relSlash string) bool {
+	return strings.HasPrefix(relSlash, "skills/") && strings.Count(relSlash, "/") >= 2
 }

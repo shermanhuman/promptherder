@@ -41,21 +41,24 @@ Copilot expects three types of files:
 │   ├── brainstorm.md          # Has description frontmatter
 │   └── review.md
 └── skills/
-    └── compound-v-tdd/
-        └── SKILL.md           # Has name + description frontmatter
+    └── compound-v-parallel/
+        ├── SKILL.md            # Generic skill (name + description frontmatter)
+        ├── ANTIGRAVITY.md      # Antigravity-specific variant (optional)
+        └── COPILOT.md          # Copilot-specific variant (optional)
 ```
 
 #### The translation
 
 ```
-Source                                    →  Output
+Source                                     →  Output
 ─────────────────────────────────────────────────────────────────────
-rules/00-general.md (no applyTo)          →  .github/copilot-instructions.md (concatenated)
-rules/shell-safety.md (applyTo: **/*.sh)  →  .github/instructions/shell-safety.instructions.md
-rules/docker.md (applyTo: Dockerfile*)    →  .github/instructions/docker.instructions.md
-workflows/brainstorm.md                   →  .github/prompts/brainstorm.prompt.md
-workflows/review.md                       →  .github/prompts/review.prompt.md
-skills/compound-v-tdd/SKILL.md            →  .github/prompts/compound-v-tdd.prompt.md
+rules/00-general.md (no applyTo)           →  .github/copilot-instructions.md (concatenated)
+rules/shell-safety.md (applyTo: **/*.sh)   →  .github/instructions/shell-safety.instructions.md
+rules/docker.md (applyTo: Dockerfile*)     →  .github/instructions/docker.instructions.md
+workflows/brainstorm.md                    →  .github/prompts/brainstorm.prompt.md
+workflows/review.md                        →  .github/prompts/review.prompt.md
+skills/compound-v-parallel/COPILOT.md      →  .github/prompts/compound-v-parallel.prompt.md  (variant preferred)
+skills/compound-v-parallel/SKILL.md        →  .github/prompts/compound-v-parallel.prompt.md  (fallback)
 ```
 
 #### Step 1: The target struct and registration (`copilot.go`)
@@ -278,11 +281,62 @@ func TestRunCopilot_DryRun(t *testing.T) {
 
 ### Existing targets as reference
 
-| Target              | File             | Pattern                                        | Good example of...                                       |
-| ------------------- | ---------------- | ---------------------------------------------- | -------------------------------------------------------- |
-| `CopilotTarget`     | `copilot.go`     | Rules → concatenated + per-rule + prompt files | Complex multi-output target with frontmatter translation |
-| `AntigravityTarget` | `antigravity.go` | Mirror directory tree                          | Simple 1:1 copy (no translation needed)                  |
-| `CompoundVTarget`   | `compoundv.go`   | Extract from embedded FS                       | Reading from `embed.FS` instead of disk                  |
+| Target              | File             | Pattern                                            | Good example of...                                       |
+| ------------------- | ---------------- | -------------------------------------------------- | -------------------------------------------------------- |
+| `CopilotTarget`     | `copilot.go`     | Rules → concatenated + per-rule + prompt files     | Complex multi-output target with frontmatter translation |
+| `AntigravityTarget` | `antigravity.go` | Mirror directory tree with skill variant selection | 1:1 copy with target-specific skill preference           |
+| `CompoundVTarget`   | `compoundv.go`   | Extract from embedded FS                           | Reading from `embed.FS` instead of disk                  |
+
+## Target-Specific Skill Variants
+
+Skills can have target-specific variants that replace the generic `SKILL.md` when installing to a particular agent target.
+
+### File structure
+
+```
+compound-v/skills/compound-v-parallel/
+├── SKILL.md              ← Generic (methodology, no agent-specific APIs)
+├── ANTIGRAVITY.md        ← Replaces SKILL.md when installing to Antigravity
+└── COPILOT.md            ← Replaces SKILL.md when installing to Copilot (optional)
+```
+
+### How it works
+
+1. **CompoundV** extracts everything (SKILL.md + all variants) to `.promptherder/agent/skills/<name>/`.
+2. **Antigravity** walks `.promptherder/agent/` and for each skill directory:
+   - If `ANTIGRAVITY.md` exists → installs it as `<name>/SKILL.md` at `.agent/`
+   - If `COPILOT.md` exists → skips it (not for this target)
+   - If no variant exists → installs generic `SKILL.md`
+3. **Copilot** checks each skill directory for `COPILOT.md` before falling back to `SKILL.md`.
+
+Variant filenames use **uppercase target names** to match the `SKILL.md` convention and stand out in directory listings.
+
+### When to create a variant
+
+Create a variant when the skill needs **agent-specific API details**. Example:
+
+| Content                                       | Where it belongs                   |
+| --------------------------------------------- | ---------------------------------- |
+| "Group independent steps into batches"        | `SKILL.md` (methodology)           |
+| "Use `waitForPreviousTools: false`"           | `ANTIGRAVITY.md` (Antigravity API) |
+| "Use concurrent tool calls in the same block" | `COPILOT.md` (Copilot API)         |
+
+### Adding a variant for a new target
+
+If you add a new target (e.g., `CursorTarget`):
+
+1. Add the variant filename to `SkillVariantFiles` in `target.go`:
+
+```go
+var SkillVariantFiles = map[string]string{
+    "ANTIGRAVITY.md": "antigravity",
+    "COPILOT.md":     "copilot",
+    "CURSOR.md":      "cursor",  // ← add this
+}
+```
+
+2. In your target's Install method, check for `CURSOR.md` before falling back to `SKILL.md`.
+3. Create `compound-v/skills/<skill-name>/CURSOR.md` for skills that need Cursor-specific instructions.
 
 ## Guidelines
 
@@ -292,3 +346,4 @@ func TestRunCopilot_DryRun(t *testing.T) {
 - **Atomic writes**: Use `writeFile()` which wraps `AtomicWriter` for safe file writes.
 - **Context cancellation**: Check `ctx.Err()` periodically in loops for graceful shutdown.
 - **Dry-run support**: When `cfg.DryRun` is true, log what would happen but don't write. Still return the paths.
+- **Skill variants**: When adding a new target, register its variant filename in `SkillVariantFiles` (in `target.go`) and implement variant preference in the target's Install method.

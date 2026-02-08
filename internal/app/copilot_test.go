@@ -819,3 +819,69 @@ func TestRunCopilot_WithSkills(t *testing.T) {
 		t.Errorf("manifest should include skill prompt file, got: %v", copilotFiles)
 	}
 }
+
+func TestBuildCopilotSkillPrompts_PrefersCopilotVariant(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: my-skill\ndescription: Generic skill.\n---\n\n# Generic\n\nGeneric content.\n")
+	mustWrite(t, filepath.Join(skillDir, "COPILOT.md"), "---\nname: my-skill\ndescription: Copilot skill.\n---\n\n# Copilot\n\nCopilot-specific content.\n")
+
+	items, err := buildCopilotSkillPrompts(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 skill prompt, got %d", len(items))
+	}
+
+	// Should use COPILOT.md content, not SKILL.md.
+	assertContains(t, items[0].Content, "Copilot-specific content")
+	assertNotContains(t, items[0].Content, "Generic content")
+	assertContains(t, items[0].Content, `description: "Copilot skill."`)
+
+	// Source label should reference COPILOT.md.
+	assertContains(t, items[0].Content, "my-skill/COPILOT.md")
+}
+
+func TestBuildCopilotSkillPrompts_FallsBackToGeneric(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: my-skill\ndescription: Generic skill.\n---\n\n# Generic\n\nGeneric content.\n")
+
+	items, err := buildCopilotSkillPrompts(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 skill prompt, got %d", len(items))
+	}
+
+	// Should use SKILL.md when no COPILOT.md exists.
+	assertContains(t, items[0].Content, "Generic content")
+	assertContains(t, items[0].Content, "my-skill/SKILL.md")
+}
+
+func TestBuildCopilotSkillPrompts_IgnoresAntigravityVariant(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: my-skill\ndescription: Generic.\n---\n\n# Generic\n")
+	mustWrite(t, filepath.Join(skillDir, "ANTIGRAVITY.md"), "---\nname: my-skill\ndescription: Antigravity.\n---\n\n# Antigravity\n")
+
+	items, err := buildCopilotSkillPrompts(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 skill prompt, got %d", len(items))
+	}
+
+	// Should use generic SKILL.md, not ANTIGRAVITY.md (that's for Antigravity target).
+	assertContains(t, items[0].Content, "# Generic")
+	assertNotContains(t, items[0].Content, "# Antigravity")
+}

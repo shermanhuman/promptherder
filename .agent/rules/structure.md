@@ -40,6 +40,8 @@ promptherder/
 ## Naming Conventions
 
 - **Skill Files**: `SKILL.md` inside a subdirectory per skill (platform requirement).
+  - Target-specific variants: `ANTIGRAVITY.md`, `COPILOT.md` in the same skill dir.
+  - Variants replace `SKILL.md` when installing to their target.
 - **Test Files**: `*_test.go` next to source.
 - **Go Files**: `snake_case` (e.g., `runner_helper_test.go`).
 - **Config Files**: `kebab-case` (e.g., `compound-v-plan.md`).

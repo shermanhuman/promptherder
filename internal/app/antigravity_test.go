@@ -251,3 +251,179 @@ func TestAntigravityTarget_Name(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", target.Name(), "antigravity")
 	}
 }
+
+func TestAntigravityTarget_SkillVariant_PrefersAntigravityMD(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Generic Skill\n")
+	mustWrite(t, filepath.Join(skillDir, "ANTIGRAVITY.md"), "# Antigravity-Specific Skill\n")
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should install ANTIGRAVITY.md as SKILL.md, not the generic.
+	targetFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatalf("SKILL.md should exist at target: %v", err)
+	}
+	if !strings.Contains(string(data), "Antigravity-Specific") {
+		t.Errorf("target SKILL.md should contain variant content, got: %s", data)
+	}
+	if strings.Contains(string(data), "Generic Skill") {
+		t.Error("target SKILL.md should NOT contain generic content")
+	}
+
+	// ANTIGRAVITY.md should NOT appear at the target.
+	antigravityFile := filepath.Join(dir, ".agent", "skills", "my-skill", "ANTIGRAVITY.md")
+	if _, err := os.Stat(antigravityFile); !os.IsNotExist(err) {
+		t.Error("ANTIGRAVITY.md should not be copied to target — it's installed as SKILL.md")
+	}
+
+	// Verify installed list contains the SKILL.md path, not ANTIGRAVITY.md.
+	for _, f := range installed {
+		if strings.Contains(f, "ANTIGRAVITY.md") {
+			t.Errorf("installed list should not contain ANTIGRAVITY.md, got: %v", installed)
+		}
+	}
+}
+
+func TestAntigravityTarget_SkillVariant_SkipsCopilotMD(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Generic Skill\n")
+	mustWrite(t, filepath.Join(skillDir, "COPILOT.md"), "# Copilot-Specific Skill\n")
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// COPILOT.md should NOT be installed.
+	copilotFile := filepath.Join(dir, ".agent", "skills", "my-skill", "COPILOT.md")
+	if _, err := os.Stat(copilotFile); !os.IsNotExist(err) {
+		t.Error("COPILOT.md should not be copied to Antigravity target")
+	}
+
+	// Generic SKILL.md should be installed (no ANTIGRAVITY.md variant).
+	targetFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatalf("SKILL.md should exist at target: %v", err)
+	}
+	if !strings.Contains(string(data), "Generic Skill") {
+		t.Errorf("should fall back to generic SKILL.md, got: %s", data)
+	}
+
+	// Verify installed list doesn't contain COPILOT.md.
+	for _, f := range installed {
+		if strings.Contains(f, "COPILOT.md") {
+			t.Errorf("installed list should not contain COPILOT.md, got: %v", installed)
+		}
+	}
+}
+
+func TestAntigravityTarget_SkillVariant_FallsBackToGeneric(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Generic Skill\n")
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Generic SKILL.md should be installed when no variant exists.
+	targetFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatalf("SKILL.md should exist at target: %v", err)
+	}
+	if !strings.Contains(string(data), "Generic Skill") {
+		t.Errorf("should use generic SKILL.md, got: %s", data)
+	}
+
+	if len(installed) != 1 {
+		t.Errorf("expected 1 file installed, got %d", len(installed))
+	}
+}
+
+func TestAntigravityTarget_SkillVariant_AllThreeFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Generic\n")
+	mustWrite(t, filepath.Join(skillDir, "ANTIGRAVITY.md"), "# Antigravity\n")
+	mustWrite(t, filepath.Join(skillDir, "COPILOT.md"), "# Copilot\n")
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Only ANTIGRAVITY.md content should be installed as SKILL.md.
+	targetFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "Antigravity") {
+		t.Errorf("should install variant, got: %s", data)
+	}
+
+	// Only one file should be installed for this skill dir.
+	skillFiles := 0
+	for _, f := range installed {
+		if strings.Contains(f, "my-skill") {
+			skillFiles++
+		}
+	}
+	if skillFiles != 1 {
+		t.Errorf("expected 1 skill file installed, got %d (installed: %v)", skillFiles, installed)
+	}
+}
+
+func TestIsInSkillDir(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"skills/compound-v-tdd/SKILL.md", true},
+		{"skills/my-skill/ANTIGRAVITY.md", true},
+		{"skills/my-skill/subdir/file.md", true},
+		{"rules/compound-v.md", false},
+		{"skills/README.md", false}, // not inside a skill subdir
+		{"workflows/plan.md", false},
+	}
+	for _, tt := range tests {
+		if got := isInSkillDir(tt.path); got != tt.want {
+			t.Errorf("isInSkillDir(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}

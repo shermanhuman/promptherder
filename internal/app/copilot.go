@@ -308,10 +308,11 @@ func buildCopilotPrompts(repoPath string) ([]planItem, error) {
 	return plan, nil
 }
 
-// buildCopilotSkillPrompts reads skill files from .promptherder/agent/skills/*/SKILL.md
+// buildCopilotSkillPrompts reads skill files from .promptherder/agent/skills/*/
 // and converts them to .github/prompts/*.prompt.md for Copilot Chat.
 //
-// Each skill directory contains a SKILL.md file with name/description frontmatter.
+// Each skill directory may contain a COPILOT.md (target-specific variant) or
+// SKILL.md (generic). COPILOT.md takes priority when present.
 // The directory name becomes the prompt file name (e.g., compound-v-tdd → compound-v-tdd.prompt.md).
 func buildCopilotSkillPrompts(repoPath string) ([]planItem, error) {
 	skillsRoot := filepath.Join(repoPath, filepath.FromSlash(skillSourceDir))
@@ -331,16 +332,23 @@ func buildCopilotSkillPrompts(repoPath string) ([]planItem, error) {
 			continue
 		}
 
-		skillFile := filepath.Join(skillsRoot, entry.Name(), "SKILL.md")
+		// Prefer target-specific variant (COPILOT.md) over generic (SKILL.md).
+		skillFile := filepath.Join(skillsRoot, entry.Name(), "COPILOT.md")
+		sourceLabel := entry.Name() + "/COPILOT.md"
+		if _, err := os.Stat(skillFile); os.IsNotExist(err) {
+			skillFile = filepath.Join(skillsRoot, entry.Name(), "SKILL.md")
+			sourceLabel = entry.Name() + "/SKILL.md"
+		}
+
 		data, err := os.ReadFile(skillFile)
 		if err != nil {
 			if os.IsNotExist(err) {
-				continue // skip directories without SKILL.md
+				continue // skip directories without SKILL.md or COPILOT.md
 			}
 			return nil, fmt.Errorf("read skill %s: %w", entry.Name(), err)
 		}
 
-		promptContent := convertWorkflowToPrompt(skillSourceDir, entry.Name()+"/SKILL.md", data)
+		promptContent := convertWorkflowToPrompt(skillSourceDir, sourceLabel, data)
 
 		plan = append(plan, planItem{
 			Target:  filepath.Join(repoPath, filepath.FromSlash(copilotPromptsDir), entry.Name()+".prompt.md"),

@@ -23,3 +23,14 @@ type TargetConfig struct {
 	DryRun   bool         // if true, log what would happen but don't write
 	Logger   *slog.Logger // structured logger
 }
+
+// SkillVariantFiles maps uppercase variant filenames to their target names.
+// When a skill directory contains a variant file matching the current target,
+// it is installed as SKILL.md, replacing the generic version.
+//
+// To add a new target variant, add an entry here and implement variant
+// preference in your target's Install method (see CONTRIBUTING.md).
+var SkillVariantFiles = map[string]string{
+	"ANTIGRAVITY.md": "antigravity",
+	"COPILOT.md":     "copilot",
+}
