@@ -30,11 +30,11 @@ Run `promptherder compound-v` to install it into `.agent/`.
 
 ## Targets
 
-| Target          | Source                       | Output                                                      | Command                    |
-| --------------- | ---------------------------- | ----------------------------------------------------------- | -------------------------- |
-| **Copilot**     | `.promptherder/agent/rules/` | `.github/copilot-instructions.md` + `.github/instructions/` | `promptherder copilot`     |
-| **Antigravity** | `.promptherder/agent/`       | `.agent/` (rules, skills, workflows)                        | `promptherder antigravity` |
-| **Compound V**  | Embedded in binary           | `.agent/` (skills, workflows, rules)                        | `promptherder compound-v`  |
+| Target          | Source                 | Output                                                                           | Command                    |
+| --------------- | ---------------------- | -------------------------------------------------------------------------------- | -------------------------- |
+| **Copilot**     | `.promptherder/agent/` | `.github/copilot-instructions.md` + `.github/instructions/` + `.github/prompts/` | `promptherder copilot`     |
+| **Antigravity** | `.promptherder/agent/` | `.agent/` (rules, skills, workflows)                                             | `promptherder antigravity` |
+| **Compound V**  | Embedded in binary     | `.promptherder/agent/` (source of truth)                                         | `promptherder compound-v`  |
 
 ## Source format
 

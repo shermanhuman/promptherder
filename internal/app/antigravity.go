@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 const (
@@ -83,19 +82,4 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 	})
 
 	return installed, err
-}
-
-// stripFrontmatterForCopy removes YAML frontmatter for file copy targets that
-// don't need it (e.g. Antigravity reads skills/workflows natively).
-// Currently unused but available for future targets that need clean content.
-func stripFrontmatterForCopy(data []byte) []byte {
-	s := string(data)
-	if !strings.HasPrefix(s, "---") {
-		return data
-	}
-	idx := strings.Index(s[3:], "---")
-	if idx == -1 {
-		return data
-	}
-	return []byte(strings.TrimLeft(s[idx+6:], "\r\n"))
 }

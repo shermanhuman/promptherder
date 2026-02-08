@@ -605,7 +605,7 @@ func TestRunCopilot_IdempotentCleanup(t *testing.T) {
 
 func TestConvertWorkflowToPrompt_Basic(t *testing.T) {
 	input := []byte("---\ndescription: Run a review pass.\n---\n\n# Review\n\nDo the review.\n")
-	result := convertWorkflowToPrompt("review.md", input)
+	result := convertWorkflowToPrompt("test/workflows", "review.md", input)
 
 	assertContains(t, result, `mode: "agent"`)
 	assertContains(t, result, `description: "Run a review pass."`)
@@ -616,7 +616,7 @@ func TestConvertWorkflowToPrompt_Basic(t *testing.T) {
 
 func TestConvertWorkflowToPrompt_StripsTurbo(t *testing.T) {
 	input := []byte("---\ndescription: Execute plan.\n---\n\n// turbo-all\n\n# Execute\n\nDo stuff.\n")
-	result := convertWorkflowToPrompt("execute.md", input)
+	result := convertWorkflowToPrompt("test/workflows", "execute.md", input)
 
 	assertNotContains(t, result, "// turbo-all")
 	assertContains(t, result, "# Execute")
