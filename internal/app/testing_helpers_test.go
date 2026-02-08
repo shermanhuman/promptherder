@@ -2,10 +2,20 @@ package app
 
 import (
 	"bytes"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+// testLogger returns a quiet logger (discards output) for tests that don't
+// inspect log content. Tests that need to capture logs should create their
+// own logger with a strings.Builder.
+func testLogger(t *testing.T) *slog.Logger {
+	t.Helper()
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 // mustMkdir creates a directory and all parent directories.
 // Fails the test if directory creation fails.
@@ -46,47 +56,6 @@ func assertNotContains(t *testing.T, data []byte, substr string) {
 	t.Helper()
 	if bytes.Contains(data, []byte(substr)) {
 		t.Errorf("expected content NOT to contain %q, got:\n%s", substr, data)
-	}
-}
-
-// setupTestRepo creates a temporary directory and returns its path.
-// The directory is automatically cleaned up when the test completes.
-func setupTestRepo(t *testing.T) string {
-	t.Helper()
-	return t.TempDir()
-}
-
-// writeTestManifest is a convenience helper for writing a manifest in tests.
-func writeTestManifest(t *testing.T, repoPath string, m manifest) {
-	t.Helper()
-	if err := writeManifest(repoPath, m); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// readTestFile is a convenience helper for reading a file in tests.
-func readTestFile(t *testing.T, path string) []byte {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return data
-}
-
-// assertFileExists verifies that a file exists at the given path.
-func assertFileExists(t *testing.T, path string) {
-	t.Helper()
-	if _, err := os.Stat(path); err != nil {
-		t.Errorf("file should exist at %s: %v", path, err)
-	}
-}
-
-// assertFileNotExists verifies that a file does NOT exist at the given path.
-func assertFileNotExists(t *testing.T, path string) {
-	t.Helper()
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Errorf("file should not exist at %s", path)
 	}
 }
 

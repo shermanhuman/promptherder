@@ -114,7 +114,7 @@ github.com/shermanhuman/promptherder/internal/app/manifest.go:81.46,87.2 1 1
 github.com/shermanhuman/promptherder/internal/app/manifest.go:91.66,94.16 3 1
 github.com/shermanhuman/promptherder/internal/app/manifest.go:94.16,96.3 1 1
 github.com/shermanhuman/promptherder/internal/app/manifest.go:97.2,98.49 2 1
-github.com/shermanhuman/promptherder/internal/app/manifest.go:98.49,101.3 2 0
+github.com/shermanhuman/promptherder/internal/app/manifest.go:98.49,101.3 2 1
 github.com/shermanhuman/promptherder/internal/app/manifest.go:102.2,102.10 1 1
 github.com/shermanhuman/promptherder/internal/app/manifest.go:106.55,110.24 2 1
 github.com/shermanhuman/promptherder/internal/app/manifest.go:110.24,113.3 2 1

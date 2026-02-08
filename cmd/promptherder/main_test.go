@@ -7,52 +7,25 @@ import (
 // --- extractSubcommand tests ---
 
 func TestExtractSubcommand(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		args             []string
 		wantSubcommand   string
 		wantRemainingLen int
 	}{
-		{
-			name:             "no subcommand",
-			args:             []string{"-dry-run", "-v"},
-			wantSubcommand:   "",
-			wantRemainingLen: 2,
-		},
-		{
-			name:             "copilot subcommand",
-			args:             []string{"copilot", "-dry-run"},
-			wantSubcommand:   "copilot",
-			wantRemainingLen: 1,
-		},
-		{
-			name:             "antigravity subcommand",
-			args:             []string{"antigravity", "-v"},
-			wantSubcommand:   "antigravity",
-			wantRemainingLen: 1,
-		},
-		{
-			name:             "compound-v subcommand",
-			args:             []string{"compound-v"},
-			wantSubcommand:   "compound-v",
-			wantRemainingLen: 0,
-		},
-		{
-			name:             "unknown subcommand",
-			args:             []string{"unknown", "-v"},
-			wantSubcommand:   "",
-			wantRemainingLen: 2,
-		},
-		{
-			name:             "empty args",
-			args:             []string{},
-			wantSubcommand:   "",
-			wantRemainingLen: 0,
-		},
+		{"no subcommand", []string{"-dry-run", "-v"}, "", 2},
+		{"copilot subcommand", []string{"copilot", "-dry-run"}, "copilot", 1},
+		{"antigravity subcommand", []string{"antigravity", "-v"}, "antigravity", 1},
+		{"compound-v subcommand", []string{"compound-v"}, "compound-v", 0},
+		{"unknown subcommand", []string{"unknown", "-v"}, "", 2},
+		{"empty args", []string{}, "", 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			gotSubcommand, gotRemaining := extractSubcommand(tt.args)
 			if gotSubcommand != tt.wantSubcommand {
 				t.Errorf("subcommand = %q, want %q", gotSubcommand, tt.wantSubcommand)
@@ -67,53 +40,27 @@ func TestExtractSubcommand(t *testing.T) {
 // --- parseIncludePatterns tests ---
 
 func TestParseIncludePatterns(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		csv  string
 		want []string
 	}{
-		{
-			name: "empty string",
-			csv:  "",
-			want: nil,
-		},
-		{
-			name: "single pattern",
-			csv:  "**/*.md",
-			want: []string{"**/*.md"},
-		},
-		{
-			name: "multiple patterns",
-			csv:  "**/*.md,**/*.yaml,*.txt",
-			want: []string{"**/*.md", "**/*.yaml", "*.txt"},
-		},
-		{
-			name: "with whitespace",
-			csv:  " **/*.md , **/*.yaml , *.txt ",
-			want: []string{"**/*.md", "**/*.yaml", "*.txt"},
-		},
-		{
-			name: "empty parts ignored",
-			csv:  "**/*.md,,**/*.yaml",
-			want: []string{"**/*.md", "**/*.yaml"},
-		},
-		{
-			name: "only whitespace",
-			csv:  "   ",
-			want: nil,
-		},
-		{
-			name: "only commas",
-			csv:  ",,,",
-			want: []string{}, // empty slice, not nil
-		},
+		{"empty string", "", nil},
+		{"single pattern", "**/*.md", []string{"**/*.md"}},
+		{"multiple patterns", "**/*.md,**/*.yaml,*.txt", []string{"**/*.md", "**/*.yaml", "*.txt"}},
+		{"with whitespace", " **/*.md , **/*.yaml , *.txt ", []string{"**/*.md", "**/*.yaml", "*.txt"}},
+		{"empty parts ignored", "**/*.md,,**/*.yaml", []string{"**/*.md", "**/*.yaml"}},
+		{"only whitespace", "   ", nil},
+		{"only commas", ",,,", []string{}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := parseIncludePatterns(tt.csv)
 
-			// Handle nil vs empty slice comparison
 			if tt.want == nil {
 				if got != nil {
 					t.Errorf("parseIncludePatterns() = %v, want nil", got)

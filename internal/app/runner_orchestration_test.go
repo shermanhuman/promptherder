@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,10 +13,10 @@ import (
 // --- RunAll tests ---
 
 func TestRunAll_AllTargetsExecute(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := testLogger(t)
 
-	// Create a mock target that tracks if Install was called
 	type mockTarget struct {
 		name      string
 		installed bool
@@ -30,10 +29,8 @@ func TestRunAll_AllTargetsExecute(t *testing.T) {
 		{name: "target-c", files: []string{".c/file.md"}},
 	}
 
-	// Convert to Target interface
 	var iTargets []Target
 	for _, mt := range targets {
-		mt := mt // Capture loop variable
 		iTargets = append(iTargets, targetFunc{
 			name: mt.name,
 			installFunc: func(ctx context.Context, cfg TargetConfig) ([]string, error) {
@@ -53,14 +50,12 @@ func TestRunAll_AllTargetsExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify all targets were executed
 	for _, mt := range targets {
 		if !mt.installed {
 			t.Errorf("target %s was not executed", mt.name)
 		}
 	}
 
-	// Verify manifest has all 3 targets
 	m := readManifest(dir, logger)
 	if len(m.Targets) != 3 {
 		t.Fatalf("manifest should have 3 targets, got %d", len(m.Targets))
@@ -79,28 +74,25 @@ func TestRunAll_AllTargetsExecute(t *testing.T) {
 }
 
 func TestRunAll_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	cancel()
 
 	iTargets := []Target{
 		targetFunc{
 			name: "test",
 			installFunc: func(ctx context.Context, cfg TargetConfig) ([]string, error) {
-				// Should not be called due to cancelled context
-				if ctx.Err() != nil {
-					return nil, ctx.Err()
-				}
-				return []string{".test/file.md"}, nil
+				t.Error("Install should not be called with cancelled context")
+				return nil, nil
 			},
 		},
 	}
 
 	cfg := Config{
 		RepoPath: dir,
-		Logger:   logger,
+		Logger:   testLogger(t),
 	}
 
 	err := RunAll(ctx, iTargets, cfg)
@@ -114,8 +106,8 @@ func TestRunAll_ContextCancellation(t *testing.T) {
 }
 
 func TestRunAll_TargetFailureStopsExecution(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	executed := make(map[string]bool)
 
@@ -145,7 +137,7 @@ func TestRunAll_TargetFailureStopsExecution(t *testing.T) {
 
 	cfg := Config{
 		RepoPath: dir,
-		Logger:   logger,
+		Logger:   testLogger(t),
 	}
 
 	err := RunAll(context.Background(), iTargets, cfg)
@@ -153,29 +145,25 @@ func TestRunAll_TargetFailureStopsExecution(t *testing.T) {
 		t.Fatal("RunAll should return error when a target fails")
 	}
 
-	// Verify error message mentions failure
 	if !strings.Contains(err.Error(), "simulated failure") && !strings.Contains(err.Error(), "target-2-fails") {
 		t.Errorf("error should mention failing target or error, got: %v", err)
 	}
 
-	// Verify target-1 was executed
 	if !executed["target-1"] {
 		t.Error("target-1 should have been executed before failure")
 	}
-
-	// Verify target-2 was executed (it's the one that failed)
 	if !executed["target-2-fails"] {
 		t.Error("target-2-fails should have been attempted")
 	}
-
-	// Note: target-3 may or may not be executed depending on implementation
-	// The current implementation doesn't explicitly stop, so target-2 failure might not prevent target-3
-	// This test documents actual behavior
+	// RunAll returns immediately on error, so target-3 must not execute.
+	if executed["target-3"] {
+		t.Error("target-3 should not execute after target-2 fails")
+	}
 }
 
 func TestRunAll_DryRunAllTargets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	iTargets := []Target{
 		targetFunc{
@@ -201,7 +189,7 @@ func TestRunAll_DryRunAllTargets(t *testing.T) {
 	cfg := Config{
 		RepoPath: dir,
 		DryRun:   true,
-		Logger:   logger,
+		Logger:   testLogger(t),
 	}
 
 	err := RunAll(context.Background(), iTargets, cfg)
@@ -209,7 +197,6 @@ func TestRunAll_DryRunAllTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify manifest was NOT written in dry-run
 	manifestPath := filepath.Join(dir, manifestDir, manifestFile)
 	if _, err := os.Stat(manifestPath); !os.IsNotExist(err) {
 		t.Error("dry-run should not write manifest")
@@ -217,12 +204,12 @@ func TestRunAll_DryRunAllTargets(t *testing.T) {
 }
 
 func TestRunAll_EmptyTargetList(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	cfg := Config{
 		RepoPath: dir,
-		Logger:   logger,
+		Logger:   testLogger(t),
 	}
 
 	err := RunAll(context.Background(), []Target{}, cfg)
@@ -234,10 +221,10 @@ func TestRunAll_EmptyTargetList(t *testing.T) {
 // --- RunTarget tests ---
 
 func TestRunTarget_PreservesOtherTargets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := testLogger(t)
 
-	// First, run target A
 	targetA := targetFunc{
 		name: "target-a",
 		installFunc: func(ctx context.Context, cfg TargetConfig) ([]string, error) {
@@ -254,13 +241,11 @@ func TestRunTarget_PreservesOtherTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify target A is in manifest
 	m1 := readManifest(dir, logger)
 	if len(m1.Targets["target-a"]) != 2 {
 		t.Fatalf("target-a should have 2 files, got %d", len(m1.Targets["target-a"]))
 	}
 
-	// Now run target B
 	targetB := targetFunc{
 		name: "target-b",
 		installFunc: func(ctx context.Context, cfg TargetConfig) ([]string, error) {
@@ -272,26 +257,22 @@ func TestRunTarget_PreservesOtherTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify BOTH targets are in manifest
 	m2 := readManifest(dir, logger)
 	if len(m2.Targets) != 2 {
 		t.Fatalf("manifest should have 2 targets, got %d", len(m2.Targets))
 	}
-
-	// Verify target A was preserved
 	if len(m2.Targets["target-a"]) != 2 {
 		t.Errorf("target-a should still have 2 files, got %d", len(m2.Targets["target-a"]))
 	}
-
-	// Verify target B was added
 	if len(m2.Targets["target-b"]) != 1 {
 		t.Errorf("target-b should have 1 file, got %d", len(m2.Targets["target-b"]))
 	}
 }
 
 func TestRunTarget_ReplacesExistingTarget(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := testLogger(t)
 
 	target := targetFunc{
 		name: "test",
@@ -305,7 +286,6 @@ func TestRunTarget_ReplacesExistingTarget(t *testing.T) {
 		Logger:   logger,
 	}
 
-	// First run
 	if err := RunTarget(context.Background(), target, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +298,6 @@ func TestRunTarget_ReplacesExistingTarget(t *testing.T) {
 		t.Errorf("expected file1.md, got %s", m1.Targets["test"][0])
 	}
 
-	// Second run with different files
 	target2 := targetFunc{
 		name: "test",
 		installFunc: func(ctx context.Context, cfg TargetConfig) ([]string, error) {
@@ -335,7 +314,6 @@ func TestRunTarget_ReplacesExistingTarget(t *testing.T) {
 		t.Fatalf("second run should have 2 files, got %d", len(m2.Targets["test"]))
 	}
 
-	// Verify old file was replaced with new files
 	files := m2.Targets["test"]
 	hasFile2 := false
 	hasFile3 := false
@@ -356,10 +334,10 @@ func TestRunTarget_ReplacesExistingTarget(t *testing.T) {
 }
 
 func TestRunTarget_EmptyManifestStart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := testLogger(t)
 
-	// No manifest exists yet
 	target := targetFunc{
 		name: "first-target",
 		installFunc: func(ctx context.Context, cfg TargetConfig) ([]string, error) {
@@ -376,7 +354,6 @@ func TestRunTarget_EmptyManifestStart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify manifest was created
 	m := readManifest(dir, logger)
 	if len(m.Targets) != 1 {
 		t.Fatalf("manifest should have 1 target, got %d", len(m.Targets))
@@ -388,7 +365,7 @@ func TestRunTarget_EmptyManifestStart(t *testing.T) {
 
 // --- Helper type for testing ---
 
-// targetFunc implements Target interface using functions
+// targetFunc implements Target interface using functions.
 type targetFunc struct {
 	name        string
 	installFunc func(context.Context, TargetConfig) ([]string, error)
