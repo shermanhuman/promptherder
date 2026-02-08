@@ -6,6 +6,8 @@ description: "Applies tests-first discipline (red/green/refactor) and adds regre
 
 # TDD Skill
 
+**Announce at start:** "Using TDD: writing test first for [behavior]."
+
 ## When to use this skill
 
 - new features that can be unit tested
@@ -41,3 +43,15 @@ When you change code, include:
 - what tests you added/changed
 - how to run them
 - what they prove
+
+## Bite-sized granularity
+
+Each step should be one action (2-5 minutes):
+
+1. Write the failing test — step
+2. Run it to confirm it fails — step
+3. Implement the minimal code to make it pass — step
+4. Run tests to confirm they pass — step
+5. Commit — step
+
+Don't combine these. Each step is independently verifiable.

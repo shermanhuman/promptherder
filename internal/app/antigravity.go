@@ -11,6 +11,7 @@ import (
 const (
 	antigravitySource = ".promptherder/agent"
 	antigravityTarget = ".agent"
+	hardRulesFile     = ".promptherder/hard-rules.md"
 )
 
 // AntigravityTarget implements the Target interface for Google Antigravity.
@@ -103,6 +104,22 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 		installed = append(installed, targetRel)
 		return nil
 	})
+
+	// Copy hard-rules.md if it exists.
+	hardRulesPath := filepath.Join(cfg.RepoPath, filepath.FromSlash(hardRulesFile))
+	if data, err := os.ReadFile(hardRulesPath); err == nil {
+		targetPath := filepath.Join(cfg.RepoPath, antigravityTarget, "rules", "hard-rules.md")
+		targetRel := filepath.ToSlash(filepath.Join(antigravityTarget, "rules", "hard-rules.md"))
+		if cfg.DryRun {
+			cfg.Logger.Info("dry-run", "target", targetRel, "source", hardRulesFile)
+		} else {
+			if err := writeFile(targetPath, data); err != nil {
+				return installed, err
+			}
+			cfg.Logger.Info("synced", "target", targetRel, "source", hardRulesFile)
+		}
+		installed = append(installed, targetRel)
+	}
 
 	return installed, err
 }

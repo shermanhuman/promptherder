@@ -427,3 +427,71 @@ func TestIsInSkillDir(t *testing.T) {
 		}
 	}
 }
+
+func TestAntigravityTarget_HardRules(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Set up source agent dir with one rule.
+	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	mustMkdir(t, srcDir)
+	mustWrite(t, filepath.Join(srcDir, "compound-v.md"), "# Compound V\n")
+
+	// Create hard-rules.md
+	mustWrite(t, filepath.Join(dir, ".promptherder", "hard-rules.md"),
+		"---\ntrigger: always_on\n---\n\n# Hard Rules\n\n- Never use eval\n")
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should install compound-v.md + hard-rules.md = 2 files.
+	if len(installed) != 2 {
+		t.Fatalf("expected 2 files installed, got %d: %v", len(installed), installed)
+	}
+
+	// Verify hard-rules.md was copied to .agent/rules/hard-rules.md
+	data, err := os.ReadFile(filepath.Join(dir, ".agent", "rules", "hard-rules.md"))
+	if err != nil {
+		t.Fatal("hard-rules.md should be copied to .agent/rules/")
+	}
+	content := string(data)
+	if !strings.Contains(content, "Never use eval") {
+		t.Error("hard-rules.md content should include the rule body")
+	}
+	if !strings.Contains(content, "trigger: always_on") {
+		t.Error("hard-rules.md should preserve frontmatter")
+	}
+}
+
+func TestAntigravityTarget_NoHardRules(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Set up source agent dir with one rule, but NO hard-rules.md.
+	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	mustMkdir(t, srcDir)
+	mustWrite(t, filepath.Join(srcDir, "compound-v.md"), "# Compound V\n")
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should install only compound-v.md = 1 file.
+	if len(installed) != 1 {
+		t.Fatalf("expected 1 file installed, got %d: %v", len(installed), installed)
+	}
+
+	// Verify hard-rules.md was NOT created.
+	if _, err := os.Stat(filepath.Join(dir, ".agent", "rules", "hard-rules.md")); err == nil {
+		t.Error("hard-rules.md should not exist when source is missing")
+	}
+}

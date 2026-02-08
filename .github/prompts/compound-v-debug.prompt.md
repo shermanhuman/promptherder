@@ -6,6 +6,8 @@ description: "Systematic debugging — reproduce, isolate, form hypotheses, inst
 
 # Debug Skill
 
+**Announce at start:** "Debugging: [symptom]. Following systematic debug workflow."
+
 ## When to use this skill
 
 - runtime errors, flaky tests, wrong outputs

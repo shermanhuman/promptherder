@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated_at": "2026-02-08T22:06:16Z",
+  "generated_at": "2026-02-08T23:06:54Z",
   "targets": {
     "antigravity": [
       ".agent/rules/browser.md",
@@ -13,6 +13,7 @@
       ".agent/skills/compound-v-tdd/SKILL.md",
       ".agent/skills/compound-v-verify/SKILL.md",
       ".agent/workflows/execute.md",
+      ".agent/workflows/idea.md",
       ".agent/workflows/plan.md",
       ".agent/workflows/review.md"
     ],
@@ -25,6 +26,7 @@
       ".github/prompts/compound-v-tdd.prompt.md",
       ".github/prompts/compound-v-verify.prompt.md",
       ".github/prompts/execute.prompt.md",
+      ".github/prompts/idea.prompt.md",
       ".github/prompts/plan.prompt.md",
       ".github/prompts/review.prompt.md"
     ],
@@ -40,6 +42,7 @@
       ".promptherder/agent/skills/compound-v-tdd/SKILL.md",
       ".promptherder/agent/skills/compound-v-verify/SKILL.md",
       ".promptherder/agent/workflows/execute.md",
+      ".promptherder/agent/workflows/idea.md",
       ".promptherder/agent/workflows/plan.md",
       ".promptherder/agent/workflows/review.md"
     ]

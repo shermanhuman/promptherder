@@ -885,3 +885,86 @@ func TestBuildCopilotSkillPrompts_IgnoresAntigravityVariant(t *testing.T) {
 	assertContains(t, items[0].Content, "# Generic")
 	assertNotContains(t, items[0].Content, "# Antigravity")
 }
+
+func TestCopilotTarget_HardRules(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Set up source agent dir with one rule.
+	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	mustMkdir(t, srcDir)
+	mustWrite(t, filepath.Join(srcDir, "compound-v.md"), "---\ntrigger: always_on\n---\n\n# Compound V\n")
+
+	// Create hard-rules.md
+	mustWrite(t, filepath.Join(dir, ".promptherder", "hard-rules.md"),
+		"---\ntrigger: always_on\n---\n\n# Hard Rules\n\n- Never use eval\n")
+
+	target := CopilotTarget{}
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should produce copilot-instructions.md with both hard-rules and compound-v content.
+	found := false
+	for _, f := range installed {
+		if strings.HasSuffix(f, "copilot-instructions.md") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("copilot-instructions.md not in installed: %v", installed)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".github", "copilot-instructions.md"))
+	if err != nil {
+		t.Fatal("copilot-instructions.md should exist")
+	}
+	content := string(data)
+	if !strings.Contains(content, "Never use eval") {
+		t.Error("copilot-instructions.md should contain hard-rules content")
+	}
+	if !strings.Contains(content, "Compound V") {
+		t.Error("copilot-instructions.md should contain regular rule content")
+	}
+	// Hard rules should come first (prepended).
+	hrIdx := strings.Index(content, "Never use eval")
+	cvIdx := strings.Index(content, "Compound V")
+	if hrIdx > cvIdx {
+		t.Error("hard-rules should appear before regular rules")
+	}
+}
+
+func TestCopilotTarget_NoHardRules(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Set up source agent dir with one rule, but NO hard-rules.md.
+	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	mustMkdir(t, srcDir)
+	mustWrite(t, filepath.Join(srcDir, "compound-v.md"), "---\ntrigger: always_on\n---\n\n# Compound V\n")
+
+	target := CopilotTarget{}
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(installed) != 1 {
+		t.Fatalf("expected 1 file installed, got %d: %v", len(installed), installed)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, ".github", "copilot-instructions.md"))
+	if err != nil {
+		t.Fatal("copilot-instructions.md should exist")
+	}
+	content := string(data)
+	if strings.Contains(content, "hard-rules") {
+		t.Error("should not contain hard-rules reference when file is missing")
+	}
+}

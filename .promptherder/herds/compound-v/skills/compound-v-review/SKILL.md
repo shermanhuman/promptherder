@@ -5,6 +5,8 @@ description: Reviews changes for correctness, edge cases, style, security, and m
 
 # Review Skill
 
+**Announce at start:** "Running review pass on [scope]."
+
 ## When to use this skill
 
 - before delivering final code changes
