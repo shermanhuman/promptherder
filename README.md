@@ -2,21 +2,21 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Fans out agent instructions from a single source of truth (`.antigravity/rules/`) to the file locations that different AI coding tools actually read.
+Fans out agent instructions from a single source of truth to the file locations that different AI coding tools actually read.
 
 ## Why
 
-You maintain your rules once in `.antigravity/rules/*.md`. promptherder generates the output files for each target system:
+You maintain your rules once in a source directory (default: `.agent/rules/*.md`). Your AI coding agent reads this directory natively — promptherder generates the output files for VS Code Copilot:
 
-| Target System | Output |
-|---|---|
-| **Gemini** (Code Assist / CLI) | `GEMINI.md` — all rules concatenated |
-| **VS Code Copilot** (repo-wide) | `.github/copilot-instructions.md` — rules without `applyTo` |
+| Target System                     | Output                                                                           |
+| --------------------------------- | -------------------------------------------------------------------------------- |
+| **AI coding agent**               | _(reads `.agent/rules/` natively — no generation needed)_                        |
+| **VS Code Copilot** (repo-wide)   | `.github/copilot-instructions.md` — rules without `applyTo`                      |
 | **VS Code Copilot** (path-scoped) | `.github/instructions/<name>.instructions.md` — rules with `applyTo` frontmatter |
 
 ## Source format
 
-Rules live in `.antigravity/rules/*.md`. Files are sorted alphabetically and processed in order.
+Rules live in your source directory (default: `.agent/rules/*.md`). Files are sorted alphabetically and processed in order.
 
 ### Repo-wide rule (no frontmatter)
 
@@ -27,7 +27,7 @@ Rules live in `.antigravity/rules/*.md`. Files are sorted alphabetically and pro
 - All changes go through Git.
 ```
 
-Goes into both `GEMINI.md` and `.github/copilot-instructions.md`.
+Goes into `.github/copilot-instructions.md`.
 
 ### Path-scoped rule (with `applyTo` frontmatter)
 
@@ -35,13 +35,20 @@ Goes into both `GEMINI.md` and `.github/copilot-instructions.md`.
 ---
 applyTo: "**/*.sh"
 ---
+
 # Shell Script Safety
 
 - Use `set -Eeuo pipefail`.
 - Never echo secrets.
 ```
 
-Goes into `GEMINI.md` (all rules always do) **and** gets its own `.github/instructions/<name>.instructions.md` file with Copilot-format frontmatter.
+Gets its own `.github/instructions/<name>.instructions.md` file with Copilot-format frontmatter.
+
+## Manifest
+
+promptherder writes `.promptherder/manifest.json` to track which files it owns in the target repo. This enables idempotent cleanup — when a source rule is renamed or deleted, the corresponding output file is automatically removed on the next run.
+
+**Commit `.promptherder/manifest.json` to your repo** so cleanup state persists across machines.
 
 ## Usage
 
@@ -54,6 +61,9 @@ promptherder --repo /path/to/repo
 
 # Include only specific source files
 promptherder --repo /path/to/repo --include "**/*.md"
+
+# Use a custom source directory
+promptherder --repo /path/to/repo --source ".gemini/rules"
 ```
 
 ## Build

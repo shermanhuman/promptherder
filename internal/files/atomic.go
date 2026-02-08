@@ -43,6 +43,11 @@ func (w AtomicWriter) Write(data []byte) error {
 		return fmt.Errorf("chmod temp file: %w", err)
 	}
 
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("fsync temp file: %w", err)
+	}
+
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("close temp file: %w", err)
 	}

@@ -83,13 +83,13 @@ func TestParseFrontmatter_EmptyFile(t *testing.T) {
 
 func TestReadSources_Basic(t *testing.T) {
 	dir := t.TempDir()
-	rulesDir := filepath.Join(dir, ".antigravity", "rules")
+	rulesDir := filepath.Join(dir, ".agent", "rules")
 	mustMkdir(t, rulesDir)
 
 	mustWrite(t, filepath.Join(rulesDir, "00-general.md"), "# General\n\nBe good.\n")
 	mustWrite(t, filepath.Join(rulesDir, "01-shell.md"), "---\napplyTo: \"**/*.sh\"\n---\n# Shell\n\nSafe bash.\n")
 
-	sources, err := readSources(dir, nil)
+	sources, err := readSources(dir, ".agent/rules", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestReadSources_Basic(t *testing.T) {
 
 func TestReadSources_MissingDir(t *testing.T) {
 	dir := t.TempDir()
-	sources, err := readSources(dir, nil)
+	sources, err := readSources(dir, ".agent/rules", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,13 +125,13 @@ func TestReadSources_MissingDir(t *testing.T) {
 
 func TestReadSources_IncludeFilter(t *testing.T) {
 	dir := t.TempDir()
-	rulesDir := filepath.Join(dir, ".antigravity", "rules")
+	rulesDir := filepath.Join(dir, ".agent", "rules")
 	mustMkdir(t, rulesDir)
 
 	mustWrite(t, filepath.Join(rulesDir, "keep.md"), "# Keep\n")
 	mustWrite(t, filepath.Join(rulesDir, "skip.txt"), "skip\n")
 
-	sources, err := readSources(dir, []string{"**/*.md"})
+	sources, err := readSources(dir, ".agent/rules", []string{"**/*.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,23 +152,18 @@ func TestBuildPlan_AllRepoWide(t *testing.T) {
 		{Name: "01-ops", Body: []byte("# Ops\n")},
 	}
 
-	plan := buildPlan(repoPath, sources)
+	plan := buildPlan(repoPath, ".agent/rules", sources)
 
-	// Should produce 2 items: GEMINI.md + copilot-instructions.md
-	if len(plan) != 2 {
-		t.Fatalf("expected 2 plan items, got %d", len(plan))
+	// Should produce 1 item: copilot-instructions.md (no GEMINI.md)
+	if len(plan) != 1 {
+		t.Fatalf("expected 1 plan item, got %d", len(plan))
 	}
 
-	assertTarget(t, plan[0], filepath.Join(repoPath, "GEMINI.md"))
-	assertTarget(t, plan[1], filepath.Join(repoPath, ".github", "copilot-instructions.md"))
+	assertTarget(t, plan[0], filepath.Join(repoPath, ".github", "copilot-instructions.md"))
 
-	// GEMINI.md should contain both
+	// copilot-instructions.md should contain both
 	assertContains(t, plan[0].Content, "# General")
 	assertContains(t, plan[0].Content, "# Ops")
-
-	// copilot-instructions.md should also contain both
-	assertContains(t, plan[1].Content, "# General")
-	assertContains(t, plan[1].Content, "# Ops")
 }
 
 func TestBuildPlan_WithApplyTo(t *testing.T) {
@@ -178,27 +173,22 @@ func TestBuildPlan_WithApplyTo(t *testing.T) {
 		{Name: "01-shell", ApplyTo: "**/*.sh", Body: []byte("# Shell\n")},
 	}
 
-	plan := buildPlan(repoPath, sources)
+	plan := buildPlan(repoPath, ".agent/rules", sources)
 
-	// GEMINI.md + copilot-instructions.md + 01-shell.instructions.md = 3
-	if len(plan) != 3 {
-		t.Fatalf("expected 3 plan items, got %d", len(plan))
+	// copilot-instructions.md + 01-shell.instructions.md = 2 (no GEMINI.md)
+	if len(plan) != 2 {
+		t.Fatalf("expected 2 plan items, got %d", len(plan))
 	}
 
-	// GEMINI.md gets ALL sources
-	assertTarget(t, plan[0], filepath.Join(repoPath, "GEMINI.md"))
-	assertContains(t, plan[0].Content, "# General")
-	assertContains(t, plan[0].Content, "# Shell")
-
 	// copilot-instructions.md gets only repo-wide (no applyTo)
-	assertTarget(t, plan[1], filepath.Join(repoPath, ".github", "copilot-instructions.md"))
-	assertContains(t, plan[1].Content, "# General")
-	assertNotContains(t, plan[1].Content, "# Shell")
+	assertTarget(t, plan[0], filepath.Join(repoPath, ".github", "copilot-instructions.md"))
+	assertContains(t, plan[0].Content, "# General")
+	assertNotContains(t, plan[0].Content, "# Shell")
 
 	// 01-shell.instructions.md gets its own file with frontmatter
-	assertTarget(t, plan[2], filepath.Join(repoPath, ".github", "instructions", "01-shell.instructions.md"))
-	assertContains(t, plan[2].Content, `applyTo: "**/*.sh"`)
-	assertContains(t, plan[2].Content, "# Shell")
+	assertTarget(t, plan[1], filepath.Join(repoPath, ".github", "instructions", "01-shell.instructions.md"))
+	assertContains(t, plan[1].Content, `applyTo: "**/*.sh"`)
+	assertContains(t, plan[1].Content, "# Shell")
 }
 
 func TestBuildPlan_AllWithApplyTo(t *testing.T) {
@@ -208,16 +198,15 @@ func TestBuildPlan_AllWithApplyTo(t *testing.T) {
 		{Name: "01-shell", ApplyTo: "**/*.sh", Body: []byte("# Shell\n")},
 	}
 
-	plan := buildPlan(repoPath, sources)
+	plan := buildPlan(repoPath, ".agent/rules", sources)
 
-	// GEMINI.md + 2 instruction files = 3 (no copilot-instructions.md since all have applyTo)
-	if len(plan) != 3 {
-		t.Fatalf("expected 3 plan items, got %d", len(plan))
+	// 2 instruction files only (no GEMINI.md, no copilot-instructions.md since all have applyTo)
+	if len(plan) != 2 {
+		t.Fatalf("expected 2 plan items, got %d", len(plan))
 	}
 
-	assertTarget(t, plan[0], filepath.Join(repoPath, "GEMINI.md"))
-	assertTarget(t, plan[1], filepath.Join(repoPath, ".github", "instructions", "00-yaml.instructions.md"))
-	assertTarget(t, plan[2], filepath.Join(repoPath, ".github", "instructions", "01-shell.instructions.md"))
+	assertTarget(t, plan[0], filepath.Join(repoPath, ".github", "instructions", "00-yaml.instructions.md"))
+	assertTarget(t, plan[1], filepath.Join(repoPath, ".github", "instructions", "01-shell.instructions.md"))
 }
 
 func TestBuildPlan_GeneratedHeaders(t *testing.T) {
@@ -226,19 +215,21 @@ func TestBuildPlan_GeneratedHeaders(t *testing.T) {
 		{Name: "00-general", Body: []byte("# Rules\n")},
 	}
 
-	plan := buildPlan(repoPath, sources)
+	plan := buildPlan(repoPath, ".agent/rules", sources)
 
+	// Only copilot-instructions.md (no GEMINI.md)
+	if len(plan) != 1 {
+		t.Fatalf("expected 1 plan item, got %d", len(plan))
+	}
 	assertContains(t, plan[0].Content, "Auto-generated by promptherder")
-	assertContains(t, plan[0].Content, "Do not edit")
-	assertContains(t, plan[1].Content, "Auto-generated by promptherder")
-	assertContains(t, plan[1].Content, "do not edit")
+	assertContains(t, plan[0].Content, "do not edit")
 }
 
 // --- Run integration ---
 
 func TestRun_DryRun(t *testing.T) {
 	dir := t.TempDir()
-	rulesDir := filepath.Join(dir, ".antigravity", "rules")
+	rulesDir := filepath.Join(dir, ".agent", "rules")
 	mustMkdir(t, rulesDir)
 	mustWrite(t, filepath.Join(rulesDir, "00-test.md"), "# Test\n")
 
@@ -253,14 +244,14 @@ func TestRun_DryRun(t *testing.T) {
 	}
 
 	// Nothing should be written in dry-run
-	if _, err := os.Stat(filepath.Join(dir, "GEMINI.md")); !os.IsNotExist(err) {
-		t.Error("dry-run should not create GEMINI.md")
+	if _, err := os.Stat(filepath.Join(dir, ".github", "copilot-instructions.md")); !os.IsNotExist(err) {
+		t.Error("dry-run should not create copilot-instructions.md")
 	}
 }
 
 func TestRun_ActualSync(t *testing.T) {
 	dir := t.TempDir()
-	rulesDir := filepath.Join(dir, ".antigravity", "rules")
+	rulesDir := filepath.Join(dir, ".agent", "rules")
 	mustMkdir(t, rulesDir)
 	mustWrite(t, filepath.Join(rulesDir, "00-general.md"), "# General\n\nBe good.\n")
 	mustWrite(t, filepath.Join(rulesDir, "01-shell.md"), "---\napplyTo: \"**/*.sh\"\n---\n# Shell\n\nSafe bash.\n")
@@ -275,13 +266,9 @@ func TestRun_ActualSync(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check GEMINI.md
-	gemini, err := os.ReadFile(filepath.Join(dir, "GEMINI.md"))
-	if err != nil {
-		t.Fatalf("GEMINI.md not created: %v", err)
-	}
-	if !bytes.Contains(gemini, []byte("# General")) || !bytes.Contains(gemini, []byte("# Shell")) {
-		t.Error("GEMINI.md should contain all rules")
+	// GEMINI.md should NOT be created (agent reads .agent/rules/ natively)
+	if _, err := os.Stat(filepath.Join(dir, "GEMINI.md")); !os.IsNotExist(err) {
+		t.Error("should not create GEMINI.md")
 	}
 
 	// Check copilot-instructions.md
@@ -321,7 +308,7 @@ func TestRun_NoSources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "GEMINI.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, ".github", "copilot-instructions.md")); !os.IsNotExist(err) {
 		t.Error("should not create files when no sources exist")
 	}
 }
@@ -354,6 +341,275 @@ func TestDedupeStrings(t *testing.T) {
 	got := strings.Join(result, ",")
 	if got != want {
 		t.Errorf("result = %q, want %q", got, want)
+	}
+}
+
+// --- manifest & cleanStale ---
+
+func TestCleanStale_RemovesStaleFromOldManifest(t *testing.T) {
+	dir := t.TempDir()
+	instDir := filepath.Join(dir, ".github", "instructions")
+	mustMkdir(t, instDir)
+
+	// Create a file that was in the old manifest but won't be in the new one.
+	mustWrite(t, filepath.Join(instDir, "old-rule.instructions.md"), "# Old rule\n")
+
+	// Create a file NOT in any manifest (user-created).
+	mustWrite(t, filepath.Join(instDir, "manual.instructions.md"), "# My custom\n")
+
+	// Create a non-instruction file.
+	mustWrite(t, filepath.Join(instDir, "README.md"), "# Instructions dir\n")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	old := manifest{
+		Version: 1,
+		Files:   []string{".github/instructions/old-rule.instructions.md"},
+	}
+	new := manifest{Version: 1, Files: nil} // empty = nothing planned
+
+	err := cleanStale(dir, old, new, false, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Stale file (in old manifest, not in new) should be removed.
+	if _, err := os.Stat(filepath.Join(instDir, "old-rule.instructions.md")); !os.IsNotExist(err) {
+		t.Error("stale file from old manifest should have been removed")
+	}
+
+	// Manual file (not in any manifest) should be preserved.
+	if _, err := os.Stat(filepath.Join(instDir, "manual.instructions.md")); err != nil {
+		t.Error("manually created file should be preserved")
+	}
+
+	// Non-instruction file should be preserved.
+	if _, err := os.Stat(filepath.Join(instDir, "README.md")); err != nil {
+		t.Error("non-instruction file should be preserved")
+	}
+}
+
+func TestCleanStale_KeepsFilesInBothManifests(t *testing.T) {
+	dir := t.TempDir()
+	instDir := filepath.Join(dir, ".github", "instructions")
+	mustMkdir(t, instDir)
+
+	mustWrite(t, filepath.Join(instDir, "01-shell.instructions.md"), "# Shell\n")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	old := manifest{Version: 1, Files: []string{".github/instructions/01-shell.instructions.md"}}
+	new := manifest{Version: 1, Files: []string{".github/instructions/01-shell.instructions.md"}}
+
+	err := cleanStale(dir, old, new, false, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// File in both manifests should still exist.
+	if _, err := os.Stat(filepath.Join(instDir, "01-shell.instructions.md")); err != nil {
+		t.Error("file in both manifests should be preserved")
+	}
+}
+
+func TestCleanStale_DryRunDoesNotDelete(t *testing.T) {
+	dir := t.TempDir()
+	instDir := filepath.Join(dir, ".github", "instructions")
+	mustMkdir(t, instDir)
+
+	stale := filepath.Join(instDir, "old-rule.instructions.md")
+	mustWrite(t, stale, "# Old\n")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	old := manifest{Version: 1, Files: []string{".github/instructions/old-rule.instructions.md"}}
+	new := manifest{Version: 1, Files: nil}
+
+	err := cleanStale(dir, old, new, true, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Dry-run should NOT delete.
+	if _, err := os.Stat(stale); err != nil {
+		t.Error("dry-run should not delete stale files")
+	}
+}
+
+func TestCleanStale_EmptyOldManifest(t *testing.T) {
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	// Empty old manifest = nothing to clean.
+	err := cleanStale(dir, manifest{}, manifest{}, false, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManifest_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+
+	m := manifest{
+		Version:     1,
+		SourceDir:   ".agent/rules",
+		GeneratedAt: "2026-02-07T00:00:00Z",
+		Files: []string{
+			".github/copilot-instructions.md",
+			".github/instructions/01-shell.instructions.md",
+		},
+	}
+
+	if err := writeManifest(dir, m); err != nil {
+		t.Fatal(err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	got := readManifest(dir, logger)
+	if got.Version != 1 {
+		t.Errorf("version = %d, want 1", got.Version)
+	}
+	if got.SourceDir != ".agent/rules" {
+		t.Errorf("source_dir = %q, want %q", got.SourceDir, ".agent/rules")
+	}
+	if len(got.Files) != 2 {
+		t.Fatalf("files count = %d, want 2", len(got.Files))
+	}
+	if got.Files[0] != ".github/copilot-instructions.md" {
+		t.Errorf("files[0] = %q", got.Files[0])
+	}
+}
+
+func TestManifest_ReadMissing(t *testing.T) {
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	m := readManifest(dir, logger)
+	if len(m.Files) != 0 {
+		t.Errorf("expected empty files, got %d", len(m.Files))
+	}
+}
+
+func TestBuildManifest(t *testing.T) {
+	repoPath := t.TempDir()
+	plan := []planItem{
+		{Target: filepath.Join(repoPath, ".github", "copilot-instructions.md")},
+		{Target: filepath.Join(repoPath, ".github", "instructions", "01-shell.instructions.md")},
+	}
+
+	m := buildManifest(repoPath, ".agent/rules", plan)
+	if m.Version != 1 {
+		t.Errorf("version = %d, want 1", m.Version)
+	}
+	if len(m.Files) != 2 {
+		t.Fatalf("files count = %d, want 2", len(m.Files))
+	}
+	// Files should be repo-relative with forward slashes.
+	if m.Files[0] != ".github/copilot-instructions.md" {
+		t.Errorf("files[0] = %q", m.Files[0])
+	}
+}
+
+func TestRun_WritesManifest(t *testing.T) {
+	dir := t.TempDir()
+	rulesDir := filepath.Join(dir, ".agent", "rules")
+	mustMkdir(t, rulesDir)
+	mustWrite(t, filepath.Join(rulesDir, "00-general.md"), "# General\n")
+
+	cfg := Config{
+		RepoPath: dir,
+		DryRun:   false,
+		Logger:   slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	if err := Run(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Manifest should exist.
+	m := readManifest(dir, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	if m.Version != 1 {
+		t.Errorf("manifest version = %d, want 1", m.Version)
+	}
+	if len(m.Files) != 1 {
+		t.Fatalf("manifest files = %d, want 1", len(m.Files))
+	}
+	if m.Files[0] != ".github/copilot-instructions.md" {
+		t.Errorf("manifest files[0] = %q", m.Files[0])
+	}
+}
+
+func TestRun_NoSources_CleansUpStaleFiles(t *testing.T) {
+	dir := t.TempDir()
+	rulesDir := filepath.Join(dir, ".agent", "rules")
+	mustMkdir(t, rulesDir)
+	mustWrite(t, filepath.Join(rulesDir, "00-general.md"), "# General\n")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	cfg := Config{RepoPath: dir, Logger: logger}
+
+	// First run: creates output + manifest.
+	if err := Run(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".github", "copilot-instructions.md")); err != nil {
+		t.Fatal("output should exist after first run")
+	}
+
+	// Remove all sources.
+	os.Remove(filepath.Join(rulesDir, "00-general.md"))
+
+	// Second run: should clean up stale output.
+	if err := Run(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".github", "copilot-instructions.md")); !os.IsNotExist(err) {
+		t.Error("stale output should be removed when sources are gone")
+	}
+
+	// Manifest should exist but be empty.
+	m := readManifest(dir, logger)
+	if len(m.Files) != 0 {
+		t.Errorf("manifest should have 0 files, got %d", len(m.Files))
+	}
+}
+
+func TestRun_IdempotentCleanup(t *testing.T) {
+	dir := t.TempDir()
+	rulesDir := filepath.Join(dir, ".agent", "rules")
+	mustMkdir(t, rulesDir)
+	mustWrite(t, filepath.Join(rulesDir, "00-general.md"), "# General\n")
+	mustWrite(t, filepath.Join(rulesDir, "01-shell.md"), "---\napplyTo: \"**/*.sh\"\n---\n# Shell\n")
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	cfg := Config{RepoPath: dir, Logger: logger}
+
+	// First run: creates both outputs.
+	if err := Run(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	inst := filepath.Join(dir, ".github", "instructions", "01-shell.instructions.md")
+	if _, err := os.Stat(inst); err != nil {
+		t.Fatal("instruction file should exist after first run")
+	}
+
+	// Remove source B.
+	os.Remove(filepath.Join(rulesDir, "01-shell.md"))
+
+	// Second run: should remove B's output, keep A's.
+	if err := Run(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(inst); !os.IsNotExist(err) {
+		t.Error("removed source's instruction file should be cleaned up")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".github", "copilot-instructions.md")); err != nil {
+		t.Error("remaining source's output should still exist")
+	}
+
+	// Manifest should reflect only A.
+	m := readManifest(dir, logger)
+	if len(m.Files) != 1 {
+		t.Fatalf("manifest should have 1 file, got %d", len(m.Files))
 	}
 }
 

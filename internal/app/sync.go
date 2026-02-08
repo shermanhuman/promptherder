@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 
@@ -20,21 +22,31 @@ import (
 var ErrValidation = errors.New("validation error")
 
 const (
-	sourceDir      = ".antigravity/rules"
-	geminiTarget   = "GEMINI.md"
+	sourceDir      = ".agent/rules"
 	copilotTarget  = ".github/copilot-instructions.md"
 	copilotInstDir = ".github/instructions"
+	manifestDir    = ".promptherder"
+	manifestFile   = "manifest.json"
 )
+
+// manifest tracks which files promptherder owns in a target repo.
+type manifest struct {
+	Version     int      `json:"version"`
+	SourceDir   string   `json:"source_dir"`
+	GeneratedAt string   `json:"generated_at"`
+	Files       []string `json:"files"` // repo-relative paths
+}
 
 // Config controls a sync run.
 type Config struct {
-	RepoPath string
-	Include  []string
-	DryRun   bool
-	Logger   *slog.Logger
+	RepoPath  string
+	SourceDir string // defaults to ".agent/rules" if empty
+	Include   []string
+	DryRun    bool
+	Logger    *slog.Logger
 }
 
-// sourceFile represents a parsed rule from .antigravity/rules/.
+// sourceFile represents a parsed rule from .agent/rules/.
 type sourceFile struct {
 	Path    string // absolute path
 	Name    string // stem without extension, e.g. "00-breakdown-infra"
@@ -49,7 +61,8 @@ type planItem struct {
 	Sources []string // names, for logging
 }
 
-// Run reads .antigravity/rules/ and fans out to Gemini and Copilot targets.
+// Run reads the source rules directory and fans out to Copilot targets.
+// The AI coding agent reads .agent/rules/ natively; no extra output is needed for it.
 func Run(ctx context.Context, cfg Config) error {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -58,22 +71,37 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("repo path: %w", ErrValidation)
 	}
 
+	srcDir := cfg.SourceDir
+	if srcDir == "" {
+		srcDir = sourceDir
+	}
+
 	repoPath, err := filepath.Abs(cfg.RepoPath)
 	if err != nil {
 		return fmt.Errorf("resolve repo path: %w", err)
 	}
 
-	sources, err := readSources(repoPath, cfg.Include)
+	sources, err := readSources(repoPath, srcDir, cfg.Include)
 	if err != nil {
 		return err
 	}
 
+	// Load previous manifest (if any) for stale file cleanup.
+	prevManifest := readManifest(repoPath, cfg.Logger)
+
 	if len(sources) == 0 {
-		cfg.Logger.Info("no source files found", "dir", sourceDir)
-		return nil
+		cfg.Logger.Info("no source files found", "dir", srcDir)
+		// Still clean up any previously generated files.
+		curManifest := manifest{Version: 1, SourceDir: srcDir, GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
+		if !cfg.DryRun {
+			if err := writeManifest(repoPath, curManifest); err != nil {
+				return err
+			}
+		}
+		return cleanStale(repoPath, prevManifest, curManifest, cfg.DryRun, cfg.Logger)
 	}
 
-	plan := buildPlan(repoPath, sources)
+	plan := buildPlan(repoPath, srcDir, sources)
 
 	cfg.Logger.Info("plan", "sources", len(sources), "outputs", len(plan))
 	for _, item := range plan {
@@ -92,12 +120,27 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Logger.Info("synced", "target", item.Target, "sources", item.Sources)
 	}
 
+	// Build and write the new manifest.
+	curManifest := buildManifest(repoPath, srcDir, plan)
+	if cfg.DryRun {
+		cfg.Logger.Info("dry-run", "target", filepath.Join(repoPath, manifestDir, manifestFile))
+	} else {
+		if err := writeManifest(repoPath, curManifest); err != nil {
+			return err
+		}
+	}
+
+	// Clean up files from previous manifest that are no longer current.
+	if err := cleanStale(repoPath, prevManifest, curManifest, cfg.DryRun, cfg.Logger); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// readSources discovers and parses all rule files under .antigravity/rules/.
-func readSources(repoPath string, include []string) ([]sourceFile, error) {
-	root := filepath.Join(repoPath, filepath.FromSlash(sourceDir))
+// readSources discovers and parses all rule files under the given source directory.
+func readSources(repoPath, srcDir string, include []string) ([]sourceFile, error) {
+	root := filepath.Join(repoPath, filepath.FromSlash(srcDir))
 
 	info, err := os.Stat(root)
 	if err != nil {
@@ -154,33 +197,16 @@ func readSources(repoPath string, include []string) ([]sourceFile, error) {
 	return sources, nil
 }
 
-// buildPlan creates output plan items for both target systems.
+// buildPlan creates output plan items for Copilot targets.
 //
 // Targets:
 //
-//	GEMINI.md                                    ← ALL sources concatenated
 //	.github/copilot-instructions.md              ← sources WITHOUT applyTo
 //	.github/instructions/<name>.instructions.md  ← each source WITH applyTo
-func buildPlan(repoPath string, sources []sourceFile) []planItem {
+func buildPlan(repoPath, srcDir string, sources []sourceFile) []planItem {
 	var plan []planItem
 
-	// 1. GEMINI.md — ALL sources concatenated.
-	var geminiParts [][]byte
-	var geminiSources []string
-	for _, s := range sources {
-		geminiParts = append(geminiParts, s.Body)
-		geminiSources = append(geminiSources, s.Name)
-	}
-	plan = append(plan, planItem{
-		Target: filepath.Join(repoPath, geminiTarget),
-		Content: concatWithHeader(
-			"# Auto-generated by promptherder from .antigravity/rules/\n# Do not edit — changes will be overwritten on next sync.\n",
-			geminiParts,
-		),
-		Sources: geminiSources,
-	})
-
-	// 2. .github/copilot-instructions.md — sources WITHOUT applyTo.
+	// 1. .github/copilot-instructions.md — sources WITHOUT applyTo.
 	var copilotParts [][]byte
 	var copilotSources []string
 	for _, s := range sources {
@@ -193,21 +219,21 @@ func buildPlan(repoPath string, sources []sourceFile) []planItem {
 		plan = append(plan, planItem{
 			Target: filepath.Join(repoPath, filepath.FromSlash(copilotTarget)),
 			Content: concatWithHeader(
-				"<!-- Auto-generated by promptherder from .antigravity/rules/ — do not edit -->\n",
+				fmt.Sprintf("<!-- Auto-generated by promptherder from %s/ \u2014 do not edit -->\n", srcDir),
 				copilotParts,
 			),
 			Sources: copilotSources,
 		})
 	}
 
-	// 3. .github/instructions/<name>.instructions.md — each source WITH applyTo.
+	// 2. .github/instructions/<name>.instructions.md — each source WITH applyTo.
 	for _, s := range sources {
 		if s.ApplyTo == "" {
 			continue
 		}
 
-		header := fmt.Sprintf("---\napplyTo: %q\n---\n<!-- Auto-generated by promptherder from .antigravity/rules/%s.md — do not edit -->\n",
-			s.ApplyTo, s.Name)
+		header := fmt.Sprintf("---\napplyTo: %q\n---\n<!-- Auto-generated by promptherder from %s/%s.md — do not edit -->\n",
+			s.ApplyTo, srcDir, s.Name)
 
 		var buf bytes.Buffer
 		buf.WriteString(header)
@@ -226,6 +252,8 @@ func buildPlan(repoPath string, sources []sourceFile) []planItem {
 }
 
 // parseFrontmatter extracts the applyTo value from YAML frontmatter.
+// The parser is intentionally minimal (no YAML dependency). Only the "applyTo"
+// key is recognized; all other frontmatter keys are silently ignored.
 // Returns the applyTo value (empty if none) and the body after frontmatter.
 func parseFrontmatter(data []byte) (applyTo string, body []byte) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -285,16 +313,91 @@ func concatWithHeader(header string, parts [][]byte) []byte {
 	return buf.Bytes()
 }
 
-func writeFile(target string, content []byte) error {
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", target, err)
+// readManifest loads the previous manifest from .promptherder/manifest.json.
+// Returns an empty manifest if the file doesn't exist or is corrupt.
+func readManifest(repoPath string, logger *slog.Logger) manifest {
+	path := filepath.Join(repoPath, manifestDir, manifestFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return manifest{}
+	}
+	var m manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		logger.Warn("corrupt manifest, treating as empty", "path", path, "error", err)
+		return manifest{}
+	}
+	return m
+}
+
+// buildManifest creates a new manifest from the current plan.
+func buildManifest(repoPath, srcDir string, plan []planItem) manifest {
+	var relPaths []string
+	for _, item := range plan {
+		rel, err := filepath.Rel(repoPath, item.Target)
+		if err != nil {
+			rel = item.Target
+		}
+		relPaths = append(relPaths, filepath.ToSlash(rel))
+	}
+	sort.Strings(relPaths)
+	return manifest{
+		Version:     1,
+		SourceDir:   srcDir,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		Files:       relPaths,
+	}
+}
+
+// writeManifest writes the manifest to .promptherder/manifest.json.
+func writeManifest(repoPath string, m manifest) error {
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal manifest: %w", err)
+	}
+	data = append(data, '\n')
+	return writeFile(filepath.Join(repoPath, manifestDir, manifestFile), data)
+}
+
+// cleanStale removes files that were in the previous manifest but are not in
+// the current one. This is the only mechanism for deleting files — promptherder
+// never deletes anything it didn't previously create.
+func cleanStale(repoPath string, prev, cur manifest, dryRun bool, logger *slog.Logger) error {
+	curSet := make(map[string]bool, len(cur.Files))
+	for _, f := range cur.Files {
+		curSet[f] = true
 	}
 
+	for _, f := range prev.Files {
+		if curSet[f] {
+			continue
+		}
+
+		absPath := filepath.Join(repoPath, filepath.FromSlash(f))
+
+		// Only remove if the file still exists.
+		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+			continue
+		}
+
+		if dryRun {
+			logger.Info("dry-run: would remove stale", "file", f)
+			continue
+		}
+
+		if err := os.Remove(absPath); err != nil {
+			return fmt.Errorf("remove stale %s: %w", f, err)
+		}
+		logger.Info("removed stale", "file", f)
+	}
+
+	return nil
+}
+
+func writeFile(target string, content []byte) error {
 	writer := files.AtomicWriter{Path: target, Perm: 0o644}
 	if err := writer.Write(content); err != nil {
 		return fmt.Errorf("write %s: %w", target, err)
 	}
-
 	return nil
 }
 
