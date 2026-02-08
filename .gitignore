@@ -4,3 +4,5 @@ bin/
 .DS_Store
 coverage*
 
+# Herds are local git clones, not committed.
+.promptherder/herds/

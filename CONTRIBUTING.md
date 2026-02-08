@@ -285,7 +285,6 @@ func TestRunCopilot_DryRun(t *testing.T) {
 | ------------------- | ---------------- | -------------------------------------------------- | -------------------------------------------------------- |
 | `CopilotTarget`     | `copilot.go`     | Rules → concatenated + per-rule + prompt files     | Complex multi-output target with frontmatter translation |
 | `AntigravityTarget` | `antigravity.go` | Mirror directory tree with skill variant selection | 1:1 copy with target-specific skill preference           |
-| `CompoundVTarget`   | `compoundv.go`   | Extract from embedded FS                           | Reading from `embed.FS` instead of disk                  |
 
 ## Target-Specific Skill Variants
 
@@ -302,7 +301,7 @@ compound-v/skills/compound-v-parallel/
 
 ### How it works
 
-1. **CompoundV** extracts everything (SKILL.md + all variants) to `.promptherder/agent/skills/<name>/`.
+1. **Herds** are pulled via `promptherder pull <url>` into `.promptherder/herds/<name>/`. The merge step copies all herd content into `.promptherder/agent/skills/<name>/`.
 2. **Antigravity** walks `.promptherder/agent/` and for each skill directory:
    - If `ANTIGRAVITY.md` exists → installs it as `<name>/SKILL.md` at `.agent/`
    - If `COPILOT.md` exists → skips it (not for this target)
@@ -347,3 +346,42 @@ var SkillVariantFiles = map[string]string{
 - **Context cancellation**: Check `ctx.Err()` periodically in loops for graceful shutdown.
 - **Dry-run support**: When `cfg.DryRun` is true, log what would happen but don't write. Still return the paths.
 - **Skill variants**: When adding a new target, register its variant filename in `SkillVariantFiles` (in `target.go`) and implement variant preference in the target's Install method.
+
+## Herds
+
+A **herd** is a versionable collection of rules, skills, and workflows pulled from any git URL.
+
+### Architecture
+
+```
+promptherder pull <url>
+  → git clone → .promptherder/herds/<name>/
+
+promptherder (bare)
+  → discover herds in .promptherder/herds/*/
+  → merge herds → .promptherder/agent/
+  → copilot: .promptherder/agent/ → .github/
+  → antigravity: .promptherder/agent/ → .agent/
+```
+
+### herd.json
+
+Each herd repo must contain a `herd.json` at its root:
+
+```json
+{
+  "name": "my-herd"
+}
+```
+
+### Conflict resolution
+
+If two herds provide the same file path (e.g. `rules/foo.md`), `mergeHerds` returns an error naming both herds and the conflicting path.
+
+### Key files
+
+| File        | Purpose                                          |
+| ----------- | ------------------------------------------------ |
+| `herd.go`   | `HerdMeta`, `discoverHerds`, `mergeHerds`        |
+| `pull.go`   | `Pull` — git clone/update + herd.json validation |
+| `runner.go` | `RunAll` — merge herds before target install     |

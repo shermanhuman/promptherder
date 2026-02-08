@@ -11,18 +11,21 @@ promptherder/
 │   ├── app/                   # Core application logic
 │   │   ├── target.go          # Target interface
 │   │   ├── antigravity.go     # Antigravity target impl
-│   │   ├── compoundv.go       # Compound V (embedded) target impl
 │   │   ├── copilot.go         # Copilot target impl
+│   │   ├── herd.go            # Herd discovery & merge
+│   │   ├── pull.go            # Git-based herd pulling
 │   │   ├── runner.go          # Orchestration & helpers
 │   │   └── manifest.go        # Manifest tracking
 │   └── files/                 # File utilities
 │       ├── atomic.go          # AtomicWriter
-├── compound-v/                # Embedded Compound V methodology
-│   ├── rules/
-│   ├── skills/
-│   └── workflows/
 ├── .promptherder/             # Source of truth for agent config
-│   ├── agent/                 # Staging area for agent files
+│   ├── herds/                 # Installed herds (pulled via git)
+│   │   └── <herd-name>/       # Each herd is a git clone
+│   │       ├── herd.json      # Herd metadata
+│   │       ├── rules/
+│   │       ├── skills/
+│   │       └── workflows/
+│   ├── agent/                 # Merged output from all herds
 │   ├── convos/                # Per-task artifacts (brainstorms, plans, reviews)
 │   │   └── <slug>/            # Each task gets its own folder
 │   ├── artifacts/             # Legacy artifacts (historical)
@@ -35,7 +38,7 @@ promptherder/
 
 - **New Targets**: `internal/app/<targetname>.go` implementing `Target`.
 - **Shared Logic**: `internal/app/runner.go` or specific helpers.
-- **Embedded Assets**: `compound-v/` (must be registered in `embed.go`).
+- **Herds**: Pulled via `promptherder pull <url>` into `.promptherder/herds/`.
 
 ## Naming Conventions
 

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	promptherder "github.com/shermanhuman/promptherder"
 	"github.com/shermanhuman/promptherder/internal/app"
 )
 
@@ -29,7 +28,11 @@ func main() {
 	// Extract subcommand (first non-flag argument).
 	subcommand, args := extractSubcommand(os.Args[1:])
 
-	// Parse flags from remaining args.
+	// Separate flags from positional args so flags work regardless of position
+	// (e.g. "pull https://url -dry-run" works the same as "pull -dry-run https://url").
+	flagArgs, positionalArgs := splitFlagsAndArgs(args)
+
+	// Parse flags.
 	fs := flag.NewFlagSet("promptherder", flag.ExitOnError)
 	var (
 		includeCSV  string
@@ -41,7 +44,10 @@ func main() {
 	fs.BoolVar(&dryRun, "dry-run", false, "Show actions without writing files")
 	fs.BoolVar(&verbose, "v", false, "Verbose logging")
 	fs.BoolVar(&showVersion, "version", false, "Print version and exit")
-	_ = fs.Parse(args)
+	_ = fs.Parse(flagArgs)
+
+	// Merge any remaining flag parse args with positional args.
+	allPositional := append(fs.Args(), positionalArgs...)
 
 	if showVersion {
 		fmt.Printf("promptherder %s (commit: %s, built: %s)\n", Version, Commit, BuildDate)
@@ -71,24 +77,36 @@ func main() {
 	// Build the targets registry.
 	copilot := app.CopilotTarget{Include: cfg.Include}
 	antigravity := app.AntigravityTarget{}
-	compoundV := app.CompoundVTarget{FS: promptherder.CompoundVFS}
 
-	allTargets := []app.Target{copilot, antigravity, compoundV}
+	allTargets := []app.Target{copilot, antigravity}
 
 	var runErr error
 	switch subcommand {
 	case "":
-		// Bare promptherder — run all targets.
+		// Bare promptherder — discover herds, merge, then fan out to targets.
 		runErr = app.RunAll(ctx, allTargets, cfg)
 	case "copilot":
 		runErr = app.RunTarget(ctx, copilot, cfg)
 	case "antigravity":
 		runErr = app.RunTarget(ctx, antigravity, cfg)
-	case "compound-v":
-		runErr = app.RunTarget(ctx, compoundV, cfg)
+	case "pull":
+		var gitURL string
+		if len(allPositional) > 0 {
+			gitURL = allPositional[0]
+		}
+		if gitURL == "" {
+			logger.Error("missing URL argument")
+			fmt.Fprintf(os.Stderr, "Usage: promptherder pull <git-url>\n")
+			os.Exit(2)
+		}
+		runErr = app.Pull(ctx, gitURL, app.PullConfig{
+			RepoPath: cwd,
+			DryRun:   dryRun,
+			Logger:   logger,
+		})
 	default:
 		logger.Error("unknown subcommand", "subcommand", subcommand)
-		fmt.Fprintf(os.Stderr, "Usage: promptherder [copilot|antigravity|compound-v] [flags]\n")
+		fmt.Fprintf(os.Stderr, "Usage: promptherder [copilot|antigravity|pull] [flags]\n")
 		os.Exit(2)
 	}
 
@@ -108,7 +126,7 @@ func extractSubcommand(args []string) (string, []string) {
 	known := map[string]bool{
 		"copilot":     true,
 		"antigravity": true,
-		"compound-v":  true,
+		"pull":        true,
 	}
 	if len(args) > 0 && known[args[0]] {
 		return args[0], args[1:]
@@ -131,4 +149,29 @@ func parseIncludePatterns(csv string) []string {
 		patterns = append(patterns, p)
 	}
 	return patterns
+}
+
+// splitFlagsAndArgs separates flag arguments (starting with -) from positional
+// arguments. This allows flags to appear before or after positional args
+// (e.g. "pull https://url -dry-run" works the same as "pull -dry-run https://url").
+func splitFlagsAndArgs(args []string) (flags, positional []string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-") {
+			flags = append(flags, a)
+			// If it's a flag that takes a value (contains = or next arg is value),
+			// consume the next arg too if it doesn't start with -.
+			if !strings.Contains(a, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				// Check if this flag looks like it takes a value (e.g. -include).
+				name := strings.TrimLeft(a, "-")
+				if name == "include" { // known value flags
+					i++
+					flags = append(flags, args[i])
+				}
+			}
+		} else {
+			positional = append(positional, a)
+		}
+	}
+	return flags, positional
 }

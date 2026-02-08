@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -18,7 +19,7 @@ func TestExtractSubcommand(t *testing.T) {
 		{"no subcommand", []string{"-dry-run", "-v"}, "", 2},
 		{"copilot subcommand", []string{"copilot", "-dry-run"}, "copilot", 1},
 		{"antigravity subcommand", []string{"antigravity", "-v"}, "antigravity", 1},
-		{"compound-v subcommand", []string{"compound-v"}, "compound-v", 0},
+		{"pull subcommand", []string{"pull", "https://example.com/my-herd"}, "pull", 1},
 		{"unknown subcommand", []string{"unknown", "-v"}, "", 2},
 		{"empty args", []string{}, "", 0},
 	}
@@ -77,6 +78,40 @@ func TestParseIncludePatterns(t *testing.T) {
 				if got[i] != tt.want[i] {
 					t.Errorf("parseIncludePatterns()[%d] = %q, want %q", i, got[i], tt.want[i])
 				}
+			}
+		})
+	}
+}
+
+// --- splitFlagsAndArgs tests ---
+
+func TestSplitFlagsAndArgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		args           []string
+		wantFlags      []string
+		wantPositional []string
+	}{
+		{"flags first", []string{"-dry-run", "https://url"}, []string{"-dry-run"}, []string{"https://url"}},
+		{"flags after url", []string{"https://url", "-dry-run"}, []string{"-dry-run"}, []string{"https://url"}},
+		{"mixed", []string{"-v", "https://url", "-dry-run"}, []string{"-v", "-dry-run"}, []string{"https://url"}},
+		{"include with value", []string{"-include", "*.md", "https://url"}, []string{"-include", "*.md"}, []string{"https://url"}},
+		{"no args", []string{}, nil, nil},
+		{"only flags", []string{"-v", "-dry-run"}, []string{"-v", "-dry-run"}, nil},
+		{"only positional", []string{"https://url"}, nil, []string{"https://url"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotFlags, gotPos := splitFlagsAndArgs(tt.args)
+			if !reflect.DeepEqual(gotFlags, tt.wantFlags) {
+				t.Errorf("flags = %v, want %v", gotFlags, tt.wantFlags)
+			}
+			if !reflect.DeepEqual(gotPos, tt.wantPositional) {
+				t.Errorf("positional = %v, want %v", gotPos, tt.wantPositional)
 			}
 		})
 	}

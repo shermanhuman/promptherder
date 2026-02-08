@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated_at": "2026-02-08T20:45:04Z",
+  "generated_at": "2026-02-08T21:43:35Z",
   "targets": {
     "antigravity": [
       ".agent/rules/browser.md",
@@ -16,7 +16,19 @@
       ".agent/workflows/plan.md",
       ".agent/workflows/review.md"
     ],
-    "compound-v": [
+    "copilot": [
+      ".github/copilot-instructions.md",
+      ".github/prompts/compound-v-debug.prompt.md",
+      ".github/prompts/compound-v-parallel.prompt.md",
+      ".github/prompts/compound-v-plan.prompt.md",
+      ".github/prompts/compound-v-review.prompt.md",
+      ".github/prompts/compound-v-tdd.prompt.md",
+      ".github/prompts/compound-v-verify.prompt.md",
+      ".github/prompts/execute.prompt.md",
+      ".github/prompts/plan.prompt.md",
+      ".github/prompts/review.prompt.md"
+    ],
+    "herds": [
       ".promptherder/agent/rules/browser.md",
       ".promptherder/agent/rules/compound-v.md",
       ".promptherder/agent/skills/README.md",
@@ -30,18 +42,6 @@
       ".promptherder/agent/workflows/execute.md",
       ".promptherder/agent/workflows/plan.md",
       ".promptherder/agent/workflows/review.md"
-    ],
-    "copilot": [
-      ".github/copilot-instructions.md",
-      ".github/prompts/compound-v-debug.prompt.md",
-      ".github/prompts/compound-v-parallel.prompt.md",
-      ".github/prompts/compound-v-plan.prompt.md",
-      ".github/prompts/compound-v-review.prompt.md",
-      ".github/prompts/compound-v-tdd.prompt.md",
-      ".github/prompts/compound-v-verify.prompt.md",
-      ".github/prompts/execute.prompt.md",
-      ".github/prompts/plan.prompt.md",
-      ".github/prompts/review.prompt.md"
     ]
   }
 }
