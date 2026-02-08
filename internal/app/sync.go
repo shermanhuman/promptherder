@@ -23,6 +23,7 @@ var ErrValidation = errors.New("validation error")
 const (
 	defaultSourceDir  = ".promptherder/agent/rules"
 	workflowSourceDir = ".promptherder/agent/workflows"
+	skillSourceDir    = ".promptherder/agent/skills"
 	copilotTarget     = ".github/copilot-instructions.md"
 	copilotInstDir    = ".github/instructions"
 	copilotPromptsDir = ".github/prompts"
@@ -102,8 +103,16 @@ func (t CopilotTarget) Install(ctx context.Context, cfg TargetConfig) ([]string,
 	if err != nil {
 		return written, err
 	}
+
+	// 3. Skills → .github/prompts/*.prompt.md.
+	skillItems, err := buildCopilotSkillPrompts(cfg.RepoPath)
+	if err != nil {
+		return written, err
+	}
+	promptItems = append(promptItems, skillItems...)
+
 	if len(promptItems) > 0 {
-		cfg.Logger.Info("plan", "target", "copilot/prompts", "outputs", len(promptItems))
+		cfg.Logger.Info("plan", "target", "copilot/prompts", "workflows", len(promptItems)-len(skillItems), "skills", len(skillItems))
 	}
 	for _, item := range promptItems {
 		if err := ctx.Err(); err != nil {
@@ -323,6 +332,50 @@ func buildCopilotPrompts(repoPath string) ([]planItem, error) {
 			Target:  filepath.Join(repoPath, filepath.FromSlash(copilotPromptsDir), stem+".prompt.md"),
 			Content: promptContent,
 			Sources: []string{stem},
+		})
+	}
+
+	return plan, nil
+}
+
+// buildCopilotSkillPrompts reads skill files from .promptherder/agent/skills/*/SKILL.md
+// and converts them to .github/prompts/*.prompt.md for Copilot Chat.
+//
+// Each skill directory contains a SKILL.md file with name/description frontmatter.
+// The directory name becomes the prompt file name (e.g., compound-v-tdd → compound-v-tdd.prompt.md).
+func buildCopilotSkillPrompts(repoPath string) ([]planItem, error) {
+	skillsRoot := filepath.Join(repoPath, filepath.FromSlash(skillSourceDir))
+
+	if _, err := os.Stat(skillsRoot); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	entries, err := os.ReadDir(skillsRoot)
+	if err != nil {
+		return nil, fmt.Errorf("read skills dir: %w", err)
+	}
+
+	var plan []planItem
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		skillFile := filepath.Join(skillsRoot, entry.Name(), "SKILL.md")
+		data, err := os.ReadFile(skillFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // skip directories without SKILL.md
+			}
+			return nil, fmt.Errorf("read skill %s: %w", entry.Name(), err)
+		}
+
+		promptContent := convertWorkflowToPrompt("skills/"+entry.Name()+"/SKILL.md", data)
+
+		plan = append(plan, planItem{
+			Target:  filepath.Join(repoPath, filepath.FromSlash(copilotPromptsDir), entry.Name()+".prompt.md"),
+			Content: promptContent,
+			Sources: []string{entry.Name()},
 		})
 	}
 

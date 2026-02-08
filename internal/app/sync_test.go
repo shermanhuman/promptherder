@@ -729,6 +729,97 @@ func TestRunCopilot_WithWorkflows(t *testing.T) {
 	}
 }
 
+// --- skill → prompt conversion ---
+
+func TestBuildCopilotSkillPrompts_Basic(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "compound-v-tdd")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: compound-v-tdd\ndescription: TDD skill.\n---\n\n# TDD\n\nRed green refactor.\n")
+
+	items, err := buildCopilotSkillPrompts(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 skill prompt, got %d", len(items))
+	}
+
+	assertTarget(t, items[0], filepath.Join(dir, ".github", "prompts", "compound-v-tdd.prompt.md"))
+	assertContains(t, items[0].Content, `mode: "agent"`)
+	assertContains(t, items[0].Content, `description: "TDD skill."`)
+	assertContains(t, items[0].Content, "# TDD")
+	assertContains(t, items[0].Content, "Red green refactor")
+}
+
+func TestBuildCopilotSkillPrompts_MissingDir(t *testing.T) {
+	dir := t.TempDir()
+	items, err := buildCopilotSkillPrompts(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestBuildCopilotSkillPrompts_SkipsDirWithoutSKILLmd(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "empty-skill")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "README.md"), "# Not a skill\n")
+
+	items, err := buildCopilotSkillPrompts(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected 0 items for dir without SKILL.md, got %d", len(items))
+	}
+}
+
+func TestRunCopilot_WithSkills(t *testing.T) {
+	dir := t.TempDir()
+
+	// Set up a skill.
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-review")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: my-review\ndescription: Review code.\n---\n\n# Review\n\nCheck things.\n")
+
+	cfg := Config{
+		RepoPath: dir,
+		DryRun:   false,
+		Logger:   slog.New(slog.NewTextHandler(os.Stderr, nil)),
+	}
+
+	if err := RunCopilot(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check prompt file was created.
+	promptFile := filepath.Join(dir, ".github", "prompts", "my-review.prompt.md")
+	data, err := os.ReadFile(promptFile)
+	if err != nil {
+		t.Fatalf("skill prompt file not created: %v", err)
+	}
+	assertContains(t, data, `mode: "agent"`)
+	assertContains(t, data, "# Review")
+
+	// Check manifest.
+	m := readManifest(dir, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	copilotFiles := m.Targets["copilot"]
+	found := false
+	for _, f := range copilotFiles {
+		if f == ".github/prompts/my-review.prompt.md" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("manifest should include skill prompt file, got: %v", copilotFiles)
+	}
+}
+
 // --- helpers ---
 
 func mustMkdir(t *testing.T, path string) {
