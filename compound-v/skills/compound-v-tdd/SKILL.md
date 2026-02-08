@@ -11,6 +11,13 @@ description: Applies tests-first discipline (red/green/refactor) and adds regres
 - bug fixes (always add a regression test if practical)
 - refactors (protect behavior with tests first)
 
+## Research
+
+Before writing tests, `search_web` for:
+
+- The project's testing framework best practices and latest patterns (scope to `stack.md` versions).
+- Assertion styles and testing utilities available in the framework.
+
 ## Rules
 
 - Prefer **red -> green -> refactor**.
@@ -24,7 +31,7 @@ description: Applies tests-first discipline (red/green/refactor) and adds regres
 2. Write/adjust a test to capture it (make it fail first if possible).
 3. Implement the minimal change to pass.
 4. Refactor if needed (keep passing).
-5. Run the relevant test suite + any linters.
+5. Run the relevant test suite + any linters **in parallel** where they are independent.
 
 ## Output requirements
 

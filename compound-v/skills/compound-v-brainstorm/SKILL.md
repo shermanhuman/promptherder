@@ -12,6 +12,14 @@ description: Produces a structured brainstorm — goals, constraints, risks, opt
 - before debugging complex issues
 - before designing an automation workflow
 
+## Research first
+
+Before generating options, search for context in parallel:
+
+- `search_web` for current alternatives, libraries, or approaches to the problem.
+- `search_web` for known pitfalls or anti-patterns in the domain.
+- Read relevant project files to understand what exists today.
+
 ## Brainstorm template (use this exact structure)
 
 ### Goal

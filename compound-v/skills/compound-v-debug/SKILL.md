@@ -15,17 +15,22 @@ description: Systematic debugging — reproduce, isolate, form hypotheses, instr
 
 1. **Reproduce**
    - Capture exact error, inputs, environment, command.
-2. **Minimize**
+2. **Research** (parallel)
+   - `search_web` for the exact error message or symptom.
+   - `search_web` for known issues in the relevant library/framework version (use `stack.md` versions).
+   - Read related source files in parallel.
+3. **Minimize**
    - Reduce to smallest repro (one file, one function, smallest dataset).
-3. **Hypotheses (2–5)**
+4. **Hypotheses (2–5)**
    - Rank by likelihood.
-4. **Instrument**
+   - Investigate independent hypotheses in parallel where possible (e.g., check config + check logs + check deps simultaneously).
+5. **Instrument**
    - Add temporary logging/assertions or use existing diagnostics.
-5. **Fix**
+6. **Fix**
    - Smallest change that removes root cause.
-6. **Prevent**
+7. **Prevent**
    - Add regression test or permanent guard/validation.
-7. **Verify**
+8. **Verify**
    - Run the failing case + relevant suites.
 
 ## Reporting format

@@ -11,6 +11,14 @@ description: Reviews changes for correctness, edge cases, style, security, and m
 - after implementing a planned set of steps
 - before merging or shipping
 
+## Research before reviewing
+
+Before applying the checklist, search for context in parallel:
+
+- `search_web` for latest best practices and known issues in the libraries/frameworks used (scope to `stack.md` versions).
+- `search_web` for security advisories or deprecation notices relevant to the APIs in use.
+- Read all changed files in parallel to build full context.
+
 ## Severity levels
 
 - **Blocker**: wrong behavior, security issue, data loss risk, broken tests/build
@@ -27,6 +35,7 @@ description: Reviews changes for correctness, edge cases, style, security, and m
 5. Performance (obvious hotspots, N+1, unnecessary work)
 6. Readability & maintainability
 7. Docs / comments updated if needed
+8. Patterns match latest framework best practices (from research)
 
 ## Output format
 
