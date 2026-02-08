@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	herdsDir     = ".promptherder/herds"
-	herdMetaFile = "herd.json"
-	agentDir     = ".promptherder/agent"
+	herdsDir      = ".promptherder/herds"
+	herdMetaFile  = "herd.json"
+	agentDir      = ".promptherder/agent"
+	hardRulesFile = ".promptherder/hard-rules.md"
 )
 
 // herdContentDirs are the only top-level directories merged from a herd.

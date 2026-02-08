@@ -75,6 +75,7 @@ func (t CopilotTarget) Install(ctx context.Context, cfg TargetConfig) ([]string,
 	}
 
 	// Inject hard-rules.md as the first source (always-on, no applyTo).
+	hardRulesInjected := false
 	hardRulesPath := filepath.Join(cfg.RepoPath, filepath.FromSlash(hardRulesFile))
 	if data, readErr := os.ReadFile(hardRulesPath); readErr == nil {
 		_, body := parseFrontmatter(data)
@@ -85,11 +86,12 @@ func (t CopilotTarget) Install(ctx context.Context, cfg TargetConfig) ([]string,
 			Body:    body,
 		}
 		sources = append([]sourceFile{hardRule}, sources...)
+		hardRulesInjected = true
 	}
 
 	if len(sources) > 0 {
 		plan := buildCopilotPlan(cfg.RepoPath, srcDir, sources)
-		cfg.Logger.Info("plan", "target", "copilot/rules", "sources", len(sources), "outputs", len(plan))
+		cfg.Logger.Info("plan", "target", "copilot/rules", "sources", len(sources), "hard-rules", hardRulesInjected, "outputs", len(plan))
 		written, err = writeItems(ctx, cfg, plan, written)
 		if err != nil {
 			return written, err
