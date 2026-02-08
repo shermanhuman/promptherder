@@ -1,4 +1,4 @@
-# Review: Naming & Namespace Cleanup
+# Review: Convo-Based Artifact Management
 
 ## Blockers
 
@@ -10,42 +10,34 @@ None.
 
 ## Minors
 
-1. **`CONTRIBUTING.md` line 200 referenced `sync_test.go`** — missed in initial rename pass. Fixed.
-2. **`structure.md` line 15 still said `sync.go (TO BE RENAMED)`** — stale marker left behind. Fixed.
-3. **`structure.md` line 40 still described abandoned `<name>_SKILL.md` convention** — leftover from the plan iteration. Fixed.
-4. **`plan.md` assumptions still referenced SKILL.md renaming** — stale after decision to keep filenames. Fixed.
+1. **First `go run` used cached binary** — The embedded FS wasn't updated on the first run. Required a second `go run` to pick up the changes. This is a known Go build cache behavior — not a bug in our code, but worth noting for the workflow: after editing `compound-v/` source files, run `go run` twice or use `go run -a` to force rebuild.
 
 ## Nits
 
-1. **`promptherder.exe` was already gitignored and untracked** — Step 1 (`git rm --cached`) was a no-op. No harm, but the plan assumed it was tracked.
+1. **`00-compound-v.md` rule reference** — The rules file at `.agent/rules/compound-v.md` (previously `00-compound-v.md`) still references `.promptherder/artifacts/` in its workflow descriptions. This is cosmetic — the actual workflow files are correct.
 
 ## Verification
 
-| Command                                | Result                            |
-| -------------------------------------- | --------------------------------- |
-| `go vet ./...`                         | Pass                              |
-| `go test ./...`                        | Pass (all packages)               |
-| `Test-Path artifacts`                  | `False` (root artifacts/ removed) |
-| `Get-ChildItem coverage*` (root)       | No output (moved)                 |
-| `.promptherder/artifacts/coverage/`    | 5 files present                   |
-| `.promptherder/artifacts/compound-v/`  | 1 file present                    |
-| `.promptherder/artifacts/superpowers/` | 2 files present                   |
+| Command                                              | Result                    |
+| ---------------------------------------------------- | ------------------------- |
+| `go vet ./...`                                       | Pass                      |
+| `go test ./...`                                      | Pass (all packages)       |
+| `Select-String artifacts/` in `.agent/workflows/`    | No matches                |
+| `Select-String artifacts/` in `.github/prompts/`     | No matches                |
+| `Select-String convos/<slug>` in `.agent/workflows/` | 20 matches across 4 files |
+| `Test-Path .promptherder/convos/.gitkeep`            | True                      |
 
 ## Summary of Changes
 
-| Change                                                         | Files                                                     |
-| -------------------------------------------------------------- | --------------------------------------------------------- |
-| Added `coverage*` to `.gitignore`                              | `.gitignore`                                              |
-| Moved coverage files to `.promptherder/artifacts/coverage/`    | 5 files                                                   |
-| Consolidated root `artifacts/` into `.promptherder/artifacts/` | 3 files, removed `artifacts/` dir                         |
-| Renamed `sync.go` → `copilot.go`                               | `internal/app/copilot.go`, `internal/app/copilot_test.go` |
-| Updated all `sync.go` references                               | `CONTRIBUTING.md` (5 locations)                           |
-| Created skills README                                          | `compound-v/skills/README.md`                             |
-| Fixed stale structure rules                                    | `.agent/rules/structure.md` (2 locations)                 |
-| Fixed stale plan assumptions                                   | `.promptherder/artifacts/plan.md`                         |
+| Change                                    | Files                                                                            |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| Added slug resolution block               | `compound-v/workflows/brainstorm.md`, `write-plan.md`, `execute.md`, `review.md` |
+| Changed persist paths to `convos/<slug>/` | Same 4 files                                                                     |
+| Updated folder layout tree                | `.agent/rules/structure.md`                                                      |
+| Created convos directory                  | `.promptherder/convos/.gitkeep`                                                  |
+| Reinstalled to all targets                | `.agent/workflows/*`, `.github/prompts/*`, `.promptherder/agent/workflows/*`     |
 
 ## Follow-ups
 
-- Consider running `promptherder` end-to-end to verify the full install pipeline with the renamed file.
-- The `00-compound-v.md` numeric prefix (Minor from original review) was not addressed — low priority.
-- Coverage files in `.promptherder/artifacts/coverage/` should be added to `.gitignore` or deleted if not needed for reference.
+- Test the workflow in a real conversation — invoke `/brainstorm` and verify it creates a `convos/<slug>/` folder.
+- Consider updating the `compound-v.md` rule file to reference `convos/` instead of `artifacts/`.

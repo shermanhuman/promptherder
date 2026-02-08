@@ -1,69 +1,101 @@
-# Plan: Naming & Namespace Cleanup
+# Plan: Convo-Based Artifact Management
 
 ## Goal
 
-Clean up technical debt identified in the review, focusing on obtuse naming (`SKILL.md`, `sync.go`) and repo clutter (`coverage*`, `artifacts/`).
+Replace hardcoded `.promptherder/artifacts/<type>.md` paths in all four Compound V workflows with `convos/<slug>/<type>.md`. Keep it minimal — trust the LLM to pick a slug from context.
 
 ## Assumptions
 
-- Antigravity/Gemini CLI **requires** `SKILL.md` filename and subdirectory structure (platform convention).
-- `promptherder.exe` was already gitignored and not tracked.
+- Source of truth is `compound-v/workflows/*.md`. After editing, `promptherder` reinstalls to `.agent/workflows/` and `.github/prompts/`.
+- No Go code changes needed — this is workflow instructions only.
+- No git commit automation — artifacts ride with normal code commits.
+- No history index file — `convos/` directory is self-describing.
+- Existing `artifacts/` files stay as-is (legacy).
 
 ## Plan
 
-### Batch 1: Quick Cleanup (Zero Risk)
+### Step 1: Update `brainstorm.md` workflow
 
-1.  **Untrack Binary**
-    - [ ] `git rm --cached promptherder.exe`
-    - [ ] Verify: `git status` shows deleted from index.
+- Files: `compound-v/workflows/brainstorm.md`
+- Change:
+  - Add slug instruction block before the persist section
+  - Change persist path from `.promptherder/artifacts/brainstorm.md` → `.promptherder/convos/<slug>/brainstorm.md`
+- Verify: Read file, confirm `convos/<slug>/` path and slug instructions present
 
-2.  **Ignored Files**
-    - [ ] Add `coverage*` to `.gitignore`.
-    - [ ] Add `promptherder.exe` to `.gitignore` (if not present).
-    - [ ] Verify: `git check-ignore coverage` returns true.
+### Step 2: Update `write-plan.md` workflow
 
-### Batch 2: Artifact Consolidation
+- Files: `compound-v/workflows/write-plan.md`
+- Change:
+  - Add slug instruction block
+  - Add: "If `convos/<slug>/brainstorm.md` exists, read it for context"
+  - Change persist path → `.promptherder/convos/<slug>/plan.md`
+  - Update approval message to include the slug
+- Verify: Read file, confirm brainstorm reference, convo path, slug in approval message
 
-3.  **Move Coverage Files**
-    - [ ] `mkdir -p .promptherder/artifacts/coverage`
-    - [ ] Move `coverage*` files to `.promptherder/artifacts/coverage/`.
-    - [ ] Verify: Files exist in new location.
+### Step 3: Update `execute.md` workflow
 
-4.  **Consolidate Root Artifacts**
-    - [ ] Move `artifacts/compound-v/*` to `.promptherder/artifacts/compound-v/`.
-    - [ ] Move `artifacts/superpowers/*` to `.promptherder/artifacts/superpowers/`.
-    - [ ] Remove `artifacts/` root directory.
-    - [ ] Verify: Root `artifacts/` is gone.
+- Files: `compound-v/workflows/execute.md`
+- Change:
+  - Add slug instruction block
+  - Change precondition: plan must exist at `.promptherder/convos/<slug>/plan.md`
+  - Change execution log path → `.promptherder/convos/<slug>/execution.md`
+  - Change review output path → `.promptherder/convos/<slug>/review.md`
+- Verify: Read file, confirm all three paths reference `convos/<slug>/`
 
-### Batch 3: Rename `sync.go` (Low Risk)
+### Step 4: Update `review.md` workflow
 
-5.  **Rename Copilot Implementation**
-    - [ ] Rename `internal/app/sync.go` → `internal/app/copilot.go`.
-    - [ ] Rename `internal/app/sync_test.go` → `internal/app/copilot_test.go`.
-    - [ ] Update any internal references (search for "sync.go").
-    - [ ] Verify: `go test ./internal/app/...` passes.
+- Files: `compound-v/workflows/review.md`
+- Change:
+  - Add slug instruction block
+  - Change persist path → `.promptherder/convos/<slug>/review.md`
+- Verify: Read file, confirm path
 
-### Batch 4: Documentation (Low Risk)
+### Step 5: Update `structure.md` rule
 
-6.  **Add Skills Documentation**
-    - [ ] Create `compound-v/skills/README.md`.
-    - [ ] Document platform constraints:
-      - Antigravity requires `SKILL.md` filename for discovery.
-      - Antigravity requires subdirectory structure (package).
-      - Copilot requires translation to `.prompt.md`.
-    - [ ] Verify: File exists and explains the "why".
+- Files: `.agent/rules/structure.md`
+- Change: Update the folder layout tree — add `convos/` under `.promptherder/`, note that `artifacts/` is legacy
+- Verify: Read file, confirm tree reflects new layout
 
-## Risks & Mitigations
+### Step 6: Create `convos/` directory
 
-- **Risk**: User confusion about `SKILL.md` ubiquity.
-  - **Mitigation**: The new README.md directly addresses this.
+- Files: `.promptherder/convos/.gitkeep`
+- Change: Create empty `.gitkeep`
+- Verify: `Test-Path .promptherder/convos/.gitkeep`
 
-## Rollback Plan
+### Step 7: Run `promptherder` to reinstall
 
-1.  Undo `sync.go` rename.
-2.  Restore `coverage` files.
-3.  Delete `README.md`.
+- Files: `.agent/workflows/*`, `.github/prompts/*`
+- Change: `go run ./cmd/promptherder`
+- Verify: Command succeeds, installed workflows match source
 
-## Persist
+### Step 8: Smoke test
 
-- [x] Plan written to `.promptherder/artifacts/plan.md`.
+- Verify: `go test ./...` passes, `go vet ./...` passes
+
+## The slug instruction block (used in steps 1-4)
+
+This is the block that gets added to each workflow. Same wording in all four:
+
+```markdown
+## Slug (resolve before persisting)
+
+Determine a task slug for organizing artifacts:
+
+1. If the user provided a kebab-case slug (e.g. `/brainstorm fix-this`), use it.
+2. If continuing a previous task, check `.promptherder/convos/` for a matching folder.
+3. Otherwise, generate a short kebab-case name (2-4 words) from the task description.
+
+Write all artifacts to `.promptherder/convos/<slug>/`.
+```
+
+## Risks & mitigations
+
+| Risk                                     | Mitigation                                             |
+| ---------------------------------------- | ------------------------------------------------------ |
+| LLM picks a different slug than expected | Slug is visible in output; user can correct and re-run |
+| `convos/` accumulates stale folders      | Manual cleanup; folders are small markdown files       |
+| `/execute` can't find the right plan     | LLM lists `convos/` and asks which task to execute     |
+
+## Rollback plan
+
+`git checkout compound-v/workflows/` + re-run `promptherder`.

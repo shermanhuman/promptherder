@@ -23,7 +23,9 @@ promptherder/
 │   └── workflows/
 ├── .promptherder/             # Source of truth for agent config
 │   ├── agent/                 # Staging area for agent files
-│   ├── artifacts/             # Project artifacts (plans, reviews)
+│   ├── convos/                # Per-task artifacts (brainstorms, plans, reviews)
+│   │   └── <slug>/            # Each task gets its own folder
+│   ├── artifacts/             # Legacy artifacts (historical)
 │   └── manifest.json          # Tracks installed/generated files
 ├── .agent/                    # Installed Antigravity agent files
 └── .github/                   # Installed Copilot agent files

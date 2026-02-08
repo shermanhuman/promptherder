@@ -6,16 +6,26 @@ description: "Executes an approved plan. Parallel-by-default. Runs verification 
 
 # Execute Plan
 
+## Slug (resolve before starting)
+
+Determine a task slug for organizing artifacts:
+
+1. If the user provided a kebab-case slug (e.g. `/execute fix-this`), use it.
+2. If continuing a previous task, check `.promptherder/convos/` for a matching folder.
+3. Otherwise, generate a short kebab-case name (2-4 words) from the task description.
+
+Write all artifacts to `.promptherder/convos/<slug>/`.
+
 ## Preconditions (do not skip)
 
 1. The user must have replied **APPROVED** to a written plan.
-2. The approved plan must exist at `.promptherder/artifacts/plan.md`.
+2. The approved plan must exist at `.promptherder/convos/<slug>/plan.md`.
 
-If the plan file does not exist, stop and tell the user to run `/write-plan` first.
+If the plan file does not exist, stop and tell the user to run `/plan` first.
 
 ## Load the plan
 
-- Read `.promptherder/artifacts/plan.md`.
+- Read `.promptherder/convos/<slug>/plan.md`.
 - Restate the plan briefly (1–2 lines) before making changes.
 
 ## Dependency analysis
@@ -34,6 +44,7 @@ Read and apply these skills when relevant:
 - `compound-v-debug` (if issues occur)
 - `compound-v-review` (at the end)
 - `compound-v-parallel` (for batch reasoning)
+- `compound-v-verify` (before reporting each step complete)
 
 ## Context files (read before starting)
 
@@ -46,7 +57,7 @@ Read and apply these skills when relevant:
 2. For each batch, fire all independent steps as concurrent tool calls.
 3. After each batch:
    - Run verification commands.
-   - Append a short note to `.promptherder/artifacts/execution.md`:
+   - Append a short note to `.promptherder/convos/<slug>/execution.md`:
      - Step name, files changed, what changed (1–3 bullets)
      - Verification command(s) and result (pass/fail)
 4. If verification fails:
@@ -60,10 +71,10 @@ Read and apply these skills when relevant:
 At the end:
 
 1. Run a review pass (Blocker/Major/Minor/Nit).
-2. Write a final summary to `.promptherder/artifacts/review.md`:
+2. Write a final summary to `.promptherder/convos/<slug>/review.md`:
    - Verification commands run + results
    - Summary of changes
    - Follow-ups (if any)
-3. Confirm artifacts exist by listing `.promptherder/artifacts/`.
+3. Confirm artifacts exist by listing `.promptherder/convos/<slug>/`.
 
 Stop after completing the finish step.

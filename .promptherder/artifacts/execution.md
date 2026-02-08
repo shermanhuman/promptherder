@@ -1,27 +1,55 @@
-# Execution Log
+# Execution: Convo-Based Artifact Management
 
-## Batch 1: Quick Cleanup
+## Batch 1 (parallel — Steps 1-6)
 
-- Untracked `promptherder.exe`.
-- Added `coverage*` to `.gitignore`.
-- Verified: `git check-ignore coverage` returns true.
+### Step 1: brainstorm.md workflow
 
-## Batch 2: Artifact Consolidation
+- Files: `compound-v/workflows/brainstorm.md`
+- Added slug resolution block, changed persist path to `convos/<slug>/brainstorm.md`
+- Verify: ✅ `convos/<slug>` references present, zero `artifacts/` references
 
-- Created `.promptherder/artifacts/coverage/`, `.promptherder/artifacts/compound-v/`, `.promptherder/artifacts/superpowers/`.
-- Moved `coverage*`, `artifacts/compound-v/*`, `artifacts/superpowers/*` to new locations.
-- Removed `artifacts/` root directory.
-- Verified: Files exist in new structure.
+### Step 2: write-plan.md workflow
 
-## Batch 3: Rename `sync.go`
+- Files: `compound-v/workflows/write-plan.md`
+- Added slug block, brainstorm context loading, changed persist path, updated approval message with slug
+- Verify: ✅ All paths updated
 
-- Renamed `internal/app/sync.go` -> `internal/app/copilot.go`.
-- Renamed `internal/app/sync_test.go` -> `internal/app/copilot_test.go`.
-- Updated `CONTRIBUTING.md` references.
-- Verified: `go test ./internal/app/...` passed.
+### Step 3: execute.md workflow
 
-## Batch 4: Documentation
+- Files: `compound-v/workflows/execute.md`
+- Added slug block, updated precondition, execution log path, review output path (5 path changes)
+- Verify: ✅ All 5 paths reference `convos/<slug>/`
 
-- Created `compound-v/skills/README.md`.
-- Documented platform constraints for `SKILL.md` and subdirectories.
-- Verified: File exists.
+### Step 4: review.md workflow
+
+- Files: `compound-v/workflows/review.md`
+- Added slug block, changed persist path
+- Verify: ✅ Path updated
+
+### Step 5: structure.md rule
+
+- Files: `.agent/rules/structure.md`
+- Added `convos/` and `<slug>/` to folder tree, marked `artifacts/` as legacy
+- Verify: ✅ Tree reflects new layout
+
+### Step 6: Create convos directory
+
+- Files: `.promptherder/convos/.gitkeep`
+- Verify: ✅ `Test-Path` returns True
+
+## Batch 2 (Step 7)
+
+### Promptherder reinstall
+
+- First run: used cached binary — installed old embedded content
+- Second run: recompiled, all 3 targets updated (copilot, antigravity, compound-v)
+- Verify: ✅ All installed workflows contain `convos/<slug>` references
+- Verify: ✅ Zero `artifacts/` references remain in any installed workflow
+
+## Batch 3 (Step 8)
+
+### Smoke test
+
+- `go vet ./...`: ✅ Pass
+- `go test ./...`: ✅ Pass (all packages)
+- Stale references check: ✅ Zero `artifacts/` paths in `.agent/workflows/` or `.github/prompts/`

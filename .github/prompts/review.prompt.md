@@ -26,9 +26,19 @@ Before reviewing, gather context. Fire these in parallel:
 - Nits
 - Summary + next actions
 
+## Slug (resolve before persisting)
+
+Determine a task slug for organizing artifacts:
+
+1. If the user provided a kebab-case slug (e.g. `/review fix-this`), use it.
+2. If continuing a previous task, check `.promptherder/convos/` for a matching folder.
+3. Otherwise, generate a short kebab-case name (2-4 words) from the task description.
+
+Write all artifacts to `.promptherder/convos/<slug>/`.
+
 ## Persist (mandatory)
 
-Write the review to `.promptherder/artifacts/review.md` using `write_to_file`.
-Confirm it exists by listing `.promptherder/artifacts/`.
+Write the review to `.promptherder/convos/<slug>/review.md` using `write_to_file`.
+Confirm it exists by listing `.promptherder/convos/<slug>/`.
 
 Do not implement changes in this workflow. Stop after persistence.
