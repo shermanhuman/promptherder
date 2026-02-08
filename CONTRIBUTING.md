@@ -58,7 +58,7 @@ workflows/review.md                       →  .github/prompts/review.prompt.md
 skills/compound-v-tdd/SKILL.md            →  .github/prompts/compound-v-tdd.prompt.md
 ```
 
-#### Step 1: The target struct and registration (`sync.go`)
+#### Step 1: The target struct and registration (`copilot.go`)
 
 ```go
 type CopilotTarget struct {
@@ -89,7 +89,7 @@ known := map[string]bool{
 }
 ```
 
-#### Step 2: The Install method (`sync.go`)
+#### Step 2: The Install method (`copilot.go`)
 
 ```go
 func (t CopilotTarget) Install(ctx context.Context, cfg TargetConfig) ([]string, error) {
@@ -197,7 +197,7 @@ for _, s := range sources {
 
 The `// turbo` and `// turbo-all` annotations are stripped because they're Antigravity-specific (they control auto-approval of commands).
 
-#### Step 4: Tests (`sync_test.go`)
+#### Step 4: Tests (`copilot_test.go`)
 
 The Copilot target has tests covering every scenario:
 
@@ -269,18 +269,18 @@ func TestRunCopilot_DryRun(t *testing.T) {
 
 | Helper                                        | What it does                                                       | Defined in    |
 | --------------------------------------------- | ------------------------------------------------------------------ | ------------- |
-| `readSources(repoPath, srcDir, include)`      | Discovers + parses all `.md` files, extracts `applyTo` frontmatter | `sync.go`     |
-| `concatWithHeader(header, parts)`             | Joins body parts with a leading comment                            | `sync.go`     |
-| `writeFile(path, content)`                    | Atomic write via temp file + rename                                | `sync.go`     |
-| `writeItems(ctx, cfg, items, written)`        | Batch write with dry-run + context cancellation                    | `sync.go`     |
+| `readSources(repoPath, srcDir, include)`      | Discovers + parses all `.md` files, extracts `applyTo` frontmatter | `copilot.go`  |
+| `concatWithHeader(header, parts)`             | Joins body parts with a leading comment                            | `copilot.go`  |
+| `writeFile(path, content)`                    | Atomic write via temp file + rename                                | `copilot.go`  |
+| `writeItems(ctx, cfg, items, written)`        | Batch write with dry-run + context cancellation                    | `copilot.go`  |
 | `readManifest(repoPath, logger)`              | Load previous manifest (for generated file checks)                 | `manifest.go` |
-| `convertWorkflowToPrompt(srcDir, name, data)` | Rewrite frontmatter + strip annotations                            | `sync.go`     |
+| `convertWorkflowToPrompt(srcDir, name, data)` | Rewrite frontmatter + strip annotations                            | `copilot.go`  |
 
 ### Existing targets as reference
 
 | Target              | File             | Pattern                                        | Good example of...                                       |
 | ------------------- | ---------------- | ---------------------------------------------- | -------------------------------------------------------- |
-| `CopilotTarget`     | `sync.go`        | Rules → concatenated + per-rule + prompt files | Complex multi-output target with frontmatter translation |
+| `CopilotTarget`     | `copilot.go`     | Rules → concatenated + per-rule + prompt files | Complex multi-output target with frontmatter translation |
 | `AntigravityTarget` | `antigravity.go` | Mirror directory tree                          | Simple 1:1 copy (no translation needed)                  |
 | `CompoundVTarget`   | `compoundv.go`   | Extract from embedded FS                       | Reading from `embed.FS` instead of disk                  |
 

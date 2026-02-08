@@ -43,8 +43,8 @@ func (t CompoundVTarget) Install(ctx context.Context, cfg TargetConfig) ([]strin
 			return nil
 		}
 
-		// path is e.g. "compound-v/rules/00-compound-v.md"
-		// Strip "compound-v/" prefix → "rules/00-compound-v.md"
+		// path is e.g. "compound-v/rules/compound-v.md"
+		// Strip "compound-v/" prefix → "rules/compound-v.md"
 		rel := path[len(compoundVPrefix)+1:]
 
 		// Skip agent-generated files that already exist.
