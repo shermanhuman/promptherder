@@ -7,11 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 )
 
 const (
-	manifestDir  = ".promptherder"
-	manifestFile = "manifest.json"
+	manifestDir     = ".promptherder"
+	manifestFile    = "manifest.json"
+	manifestVersion = 2
 )
 
 // manifest tracks which files promptherder owns in a target repo.
@@ -74,6 +76,16 @@ func (m manifest) isGenerated(name string) bool {
 	return false
 }
 
+// newManifestFrom creates a new manifest from a previous one, preserving
+// the Generated list and initializing with current timestamp.
+func newManifestFrom(prev manifest) manifest {
+	return manifest{
+		Version:     manifestVersion,
+		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+		Generated:   prev.Generated,
+	}
+}
+
 // readManifest loads the previous manifest from .promptherder/manifest.json.
 // Returns an empty manifest if the file doesn't exist or is corrupt.
 func readManifest(repoPath string, logger *slog.Logger) manifest {
@@ -93,7 +105,7 @@ func readManifest(repoPath string, logger *slog.Logger) manifest {
 // writeManifest writes the manifest to .promptherder/manifest.json.
 func writeManifest(repoPath string, m manifest) error {
 	// Upgrade to v2.
-	m.Version = 2
+	m.Version = manifestVersion
 	// Clear v1-only fields if we have v2 targets.
 	if len(m.Targets) > 0 {
 		m.Files = nil

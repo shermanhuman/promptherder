@@ -1,113 +1,407 @@
-# Plan — Compound V Migration & promptherder v2
+# Implementation Plan: Eliminate DRY Violations
+
+**Created**: 2026-02-07T22:54  
+**Goal**: Refactor promptherder codebase to eliminate all identified code duplication  
+**Source**: `.promptherder/artifacts/review.md` (DRY-focused review)
+
+---
 
 ## Goal
 
-1. **Migrate the intelligence from `superpowers` (and `gemini-superpowers-antigravity`) into `compound-v`**, a streamlined, native version for Antigravity.
-2. **Architect `promptherder` as an idempotent agent configuration manager** that fans out these capabilities.
-3. Establish `.promptherder/agent/` as the single source of truth for project rules.
-4. Implement extensible "Target" architecture (Copilot, Antigravity, Compound V) with easy contribution flow.
+Eliminate all DRY (Don't Repeat Yourself) violations in the promptherder codebase by extracting duplicated code into shared helpers and abstractions. This will:
 
-## Core Philosophy
+1. Reduce ~150 lines of duplicated code to ~50 lines of shared helpers
+2. Make bug fixes and enhancements easier (change in one place instead of 2-3)
+3. Improve testability and maintainability
+4. Set patterns for future target implementations
 
-- **Configuration Management, not Package Management:** We manage the _state_ of AI agent configurations (.agent/, .github/) from a single source (.promptherder/). We don't fetch remote dependencies.
-- **Migration, not Reinvention:** We are moving the _proven_ prompts from `superpowers`. We are only changing their _packaging_ (Python wrapper → native Antigravity files) and _location_.
-- **Idempotency:** Running `promptherder` once or 100 times must result in the exact same state. No duplicate entries, no half-written files.
-- **Single Source of Truth:** Humans allow list rules in `.promptherder/agent/`. Machines generate `.agent/` and `.github/`.
+---
 
-## Architecture: The "Fan-Out"
+## Assumptions
 
-```
-[SOURCE]                                      [TARGETS]
-.promptherder/agent/ (Project Rules) ──┬──→ .agent/  (Antigravity)
-                                       ├──→ .github/ (Copilot)
-                                       └──→ ???      (Future: Windsurf, etc.)
+- All existing tests must pass after each change
+- No changes to public API or CLI interface
+- Refactoring is internal to `internal/app/` package
+- The `Target` interface remains unchanged
+- Test coverage sufficient to catch regressions
 
-[SOURCE]
-Embedded "Compound V" (Methodology) ───→ .agent/  (Antigravity)
-```
+---
 
 ## Plan
 
-### Phase 1: MIGRATE Superpowers Content (Compound V)
+### Step 1: Extract manifest initialization helper (M3)
 
-**Source:** existing `superpowers-*` files + `gemini-superpowers-antigravity` starting point.
-**Modifications:** Apply ONLY the improvements agreed upon in `artifacts/compound-v/brainstorm.md`. Do NOT arbitrarily shorten or rewrite proven prompts.
+**Priority**: High (smallest, safest change - good warmup)  
+**Estimated time**: 10 minutes
 
-**Batch 1: Skills (Parallel)**
+**Files**:
 
-1.  **Migrate Planning:** `superpowers-plan` → `compound-v/skills/compound-v-plan/SKILL.md`
-    - _Direct Port:_ Keep all proven planning instructions.
-2.  **Migrate Review:** `superpowers-review` → `compound-v/skills/compound-v-review/SKILL.md`
-    - _Direct Port:_ Keep severity levels and review checklist.
-3.  **Migrate TDD:** `superpowers-tdd` → `compound-v/skills/compound-v-tdd/SKILL.md`
-    - _Direct Port:_ Keep Red/Green/Refactor discipline.
-4.  **Migrate Debugging:** `superpowers-debug` → `compound-v/skills/compound-v-debug/SKILL.md`
-    - _Direct Port:_ Keep systematic isolation strategy.
-5.  **Migrate Brainstorming:** `superpowers-brainstorm` → `compound-v/skills/compound-v-brainstorm/SKILL.md`
-    - _Direct Port:_ Keep the rigorous options analysis.
-6.  **Create Parallel Skill:** `compound-v/skills/compound-v-parallel/SKILL.md` (New)
-    - _New:_ Implements the parallel execution logic previously hidden in workflows.
+- `internal/app/manifest.go`
+- `internal/app/runner.go`
+- `internal/app/sync.go`
 
-**Batch 2: Workflows (Parallel)**
+**Change**:
 
-7.  **Migrate Brainstorm Workflow:** `superpowers-brainstorm.md` → `compound-v/workflows/brainstorm.md`
-    - _Diff:_ Use native `write_to_file`. Artifacts to `.promptherder/artifacts/`.
-8.  **Migrate Plan Workflow:** `superpowers-write-plan.md` → `compound-v/workflows/write-plan.md`
-    - _Diff:_ Add `stack.md` (tables first, rules second) and `structure.md` generation steps as per `brainstorm.md`.
-9.  **Migrate Execution Workflow:** `superpowers-execute-plan.md` → `compound-v/workflows/execute.md`
-    - _Diff:_ Merge sequential + parallel logic. Use `// turbo-all`.
-10. **Migrate Review Workflow:** `superpowers-review.md` → `compound-v/workflows/review.md`
-    - _Diff:_ Native file writing.
+1. Add `newManifestFrom(prev manifest) manifest` function to `manifest.go`
+2. Replace 3 instances of manual manifest initialization with helper call:
+   - `runner.go:32-36` → `curManifest := newManifestFrom(prevManifest)`
+   - `runner.go:88-92` → `curManifest := newManifestFrom(prevManifest)`
+   - `sync.go:134-138` → `curManifest := newManifestFrom(prevManifest)`
 
-**Batch 3: Rules (Parallel)**
+**Verify**:
 
-11. **Create Core Rule:** `compound-v/rules/00-compound-v.md`
-    - _Content:_ Binds the methodology together (Awareness of the pipeline).
-12. **Create Browser Rule:** `compound-v/rules/browser.md`
-    - _Content:_ Manual trigger (`@browser.md`) for browser testing.
-
-### Phase 2: Cleanup Old Superpowers (Parallel)
-
-13. Delete `.agent/skills/superpowers-*` (all 9 dirs + scripts).
-14. Delete `.agent/workflows/superpowers-*.md` (all 8 files).
-15. Delete `.agent/rules/00-promptherder.md`.
-
-### Phase 3: Go Implementation (promptherder v2)
-
-_Goal: Idempotent configuration management._
-
-16. **Embed Source:** Create `embed.go` at repo root (`//go:embed compound-v`).
-17. **Define Interfaces:**
-    - Create `internal/app/target.go`: `Target` interface (`Name()`, `Install()`).
-    - Ensure `Install` methods are distinct and idempotent (check content hash or atomic overwrite).
-18. **Implement Targets:**
-    - `CopilotTarget`: Syncs `.promptherder/agent/rules` → `.github/` (replaces old logic).
-    - `AntigravityTarget`: Syncs `.promptherder/agent/` → `.agent/` (New).
-    - `CompoundVTarget`: Extracts embedded `compound-v` → `.agent/` (New).
-    - _Constraint:_ `Antigravity` and `CompoundV` targets must **skip** files listed in `manifest.Generated` (e.g., `stack.md`, `structure.md`) to avoid overwriting agent work.
-19. **Manifest v2:** Update `internal/app/manifest.go` to track files per-target.
-20. **CLI Router:** Update `cmd/promptherder/main.go`:
-    - `promptherder` (idempotent copy all)
-    - `promptherder <target>` (idempotent copy specific)
-    - Flags: `--dry-run`, `-v`, `--version`. (No `--repo`, use cwd).
-
-### Phase 4: Verification
-
-21. **Unit Tests:** Update existing tests, add tests for new Targets and idempotency.
-22. **Integration Test:**
-    - Run `promptherder` in a fresh temp dir. Check file structure.
-    - Run `promptherder` _again_. Check that nothing changed/broke (idempotency).
-    - Run `promptherder compound-v`. Check only compound-v files update.
-
-### Phase 5: Documentation & Polish
-
-23. **README:** Credit `obra/superpowers` and `anthonylee991`. Document new flow.
-24. **CONTRIBUTING:** Add guide for adding new Targets.
-25. **Cleanup:** Remove old `artifacts/` folder.
-
-## Dependency Graph
-
+```powershell
+go test ./internal/app/... -v
+go build ./cmd/promptherder
 ```
-[Phase 1: Migrate Content] ──┐
-[Phase 2: Cleanup Old] ──────┴──→ [Phase 3: Go Code] ──→ [Phase 4: Verify] ──→ [Phase 5: Docs]
+
+**Success criteria**: All tests pass, binary builds
+
+---
+
+### Step 2: Extract runner setup/teardown helpers (M1)
+
+**Priority**: High (high impact, well-isolated)  
+**Estimated time**: 20 minutes
+
+**Files**:
+
+- `internal/app/runner.go`
+
+**Change**:
+
+1. Add `setupRunner(cfg *Config) (repoPath string, prevManifest manifest, tcfg TargetConfig, err error)` function
+2. Add `persistAndClean(repoPath string, prev, cur manifest, dryRun bool, logger *slog.Logger) error` function
+3. Refactor `RunAll` to use both helpers
+4. Refactor `RunTarget` to use both helpers
+
+**Verify**:
+
+```powershell
+go test ./internal/app/... -v -run TestRun
+.\promptherder.exe --dry-run
+.\promptherder.exe antigravity --dry-run
 ```
+
+**Success criteria**:
+
+- All runner tests pass
+- Dry-run commands work correctly
+- Code in `RunAll` and `RunTarget` reduced from ~50 lines each to ~25 lines each
+
+---
+
+### Step 3: Add manifest version constant (n1)
+
+**Priority**: Low (quick win)  
+**Estimated time**: 5 minutes
+
+**Files**:
+
+- `internal/app/manifest.go`
+
+**Change**:
+
+1. Add `const manifestVersion = 2` at package level
+2. Replace all hard-coded `2` values with `manifestVersion`:
+   - `writeManifest` function (line 95)
+   - `newManifestFrom` helper (from Step 1)
+
+**Verify**:
+
+```powershell
+go test ./internal/app/... -v -run TestManifest
+```
+
+**Success criteria**: All manifest tests pass
+
+---
+
+### Step 4: Extract default logger helper (m1)
+
+**Priority**: Medium (reduces test boilerplate)  
+**Estimated time**: 15 minutes
+
+**Files**:
+
+- `internal/app/logger.go` (new file)
+- `internal/app/runner.go`
+- `internal/app/sync_test.go`
+
+**Change**:
+
+1. Create `internal/app/logger.go` with:
+   ```go
+   func defaultLogger() *slog.Logger {
+       return slog.New(slog.NewTextHandler(os.Stderr, nil))
+   }
+   ```
+2. Replace pattern in `setupRunner` (from Step 2)
+3. Replace pattern in 3-5 test files (grep search confirmed at least 6 instances)
+
+**Verify**:
+
+```powershell
+go test ./internal/app/... -v
+```
+
+**Success criteria**: All tests pass, logger creation uses helper
+
+---
+
+### Step 5: Extract generic file installer (M2 - Part 1: Create abstraction)
+
+**Priority**: High (most complex, highest value)  
+**Estimated time**: 30 minutes
+
+**Files**:
+
+- `internal/app/install.go` (new file)
+
+**Change**:
+
+1. Create `install.go` with documented file installer abstraction:
+
+   ```go
+   // fileWalker abstracts over filesystem and embedded FS walking
+   type fileWalker func(visit func(path string, isDir bool) error) error
+
+   // fileReader abstracts over reading from filesystem or embedded FS
+   type fileReader func(path string) ([]byte, error)
+
+   // installFiles handles the common file installation pattern
+   func installFiles(
+       ctx context.Context,
+       cfg TargetConfig,
+       m manifest,
+       walker fileWalker,
+       reader fileReader,
+       relPath func(path string) (string, error),
+       targetDir string,
+   ) ([]string, error)
+   ```
+
+2. Implement full logic with all shared patterns:
+   - Context cancellation checking
+   - Skip directories
+   - Generated file checking
+   - Dry-run vs actual write
+   - Logging
+   - Installed tracking
+
+**Verify**:
+
+```powershell
+go build ./internal/app/...
+```
+
+**Success criteria**: Package compiles, helper function is complete and documented
+
+---
+
+### Step 6: Refactor AntigravityTarget to use installer (M2 - Part 2)
+
+**Priority**: High  
+**Estimated time**: 20 minutes
+
+**Files**:
+
+- `internal/app/antigravity.go`
+
+**Change**:
+
+1. Adapt `AntigravityTarget.Install()` to use `installFiles` helper
+2. Create wrapper functions for:
+   - Walker: `filepath.Walk` adapter
+   - Reader: `os.ReadFile` wrapper
+   - RelPath: `filepath.Rel` wrapper
+3. Reduce `Install()` from ~50 lines to ~15-20 lines
+
+**Verify**:
+
+```powershell
+go test ./internal/app/... -v -run TestAntigravity
+.\promptherder.exe antigravity --dry-run -v
+```
+
+**Success criteria**:
+
+- All Antigravity tests pass
+- Dry-run shows correct output
+- Files are still synced correctly
+
+---
+
+### Step 7: Refactor CompoundVTarget to use installer (M2 - Part 3)
+
+**Priority**: High  
+**Estimated time**: 20 minutes
+
+**Files**:
+
+- `internal/app/compoundv.go`
+
+**Change**:
+
+1. Adapt `CompoundVTarget.Install()` to use `installFiles` helper
+2. Create wrapper functions for:
+   - Walker: `fs.WalkDir` adapter
+   - Reader: `fs.ReadFile` wrapper
+   - RelPath: embedded path extraction
+3. Reduce `Install()` from ~50 lines to ~15-20 lines
+
+**Verify**:
+
+```powershell
+go test ./internal/app/... -v -run TestCompound
+.\promptherder.exe compound-v --dry-run -v
+```
+
+**Success criteria**:
+
+- All Compound V tests pass
+- Installation message still appears
+- Files are synced correctly
+
+---
+
+### Step 8: Add test helper for repo setup (m3)
+
+**Priority**: Low (improves test maintenance)  
+**Estimated time**: 25 minutes
+
+**Files**:
+
+- `internal/app/testing_helpers_test.go` (new file, test-only)
+
+**Change**:
+
+1. Create test helper file with `// +build test` tag
+2. Add `setupTestRepo(t *testing.T) (dir string, cleanup func())`
+3. Add `mustWrite(t *testing.T, path, content string)`
+4. Refactor 3-4 test functions to use helpers as proof of concept
+
+**Verify**:
+
+```powershell
+go test ./internal/app/... -v
+```
+
+**Success criteria**: All tests pass with less boilerplate
+
+---
+
+### Step 9: Run full test suite and build
+
+**Priority**: Critical  
+**Estimated time**: 10 minutes
+
+**Files**: All
+
+**Change**: None (verification only)
+
+**Verify**:
+
+```powershell
+# Full test suite
+go test ./... -v -race -coverprofile=coverage.out
+
+# Build binary
+go build -o promptherder.exe ./cmd/promptherder
+
+# Smoke test
+.\promptherder.exe --version
+.\promptherder.exe --dry-run -v
+.\promptherder.exe compound-v
+.\promptherder.exe antigravity
+.\promptherder.exe copilot
+
+# Verify manifest
+cat .promptherder\manifest.json
+```
+
+**Success criteria**:
+
+- All tests pass
+- Binary builds
+- All commands work
+- Manifest is valid JSON
+- Coverage remains >= current level
+
+---
+
+### Step 10: Update manifest to track generated rules
+
+**Priority**: Low (finish cleanup)  
+**Estimated time**: 5 minutes
+
+**Files**:
+
+- `.promptherder/manifest.json`
+
+**Change**:
+
+1. Add `stack.md` and `structure.md` to `manifest.generated` list
+2. This prevents promptherder from overwriting these agent-generated rules
+
+**Verify**:
+
+```powershell
+cat .promptherder\manifest.json | jq .generated
+```
+
+**Success criteria**: JSON contains `["stack.md", "structure.md"]` in generated array
+
+---
+
+## Risks & Mitigations
+
+| Risk                             | Likelihood | Impact | Mitigation                                                           |
+| -------------------------------- | ---------- | ------ | -------------------------------------------------------------------- |
+| Break existing tests             | Medium     | High   | Run tests after each step; rollback if failures                      |
+| Change behavior of targets       | Low        | High   | Extensive manual testing with --dry-run; compare before/after output |
+| Generic helper too complex       | Medium     | Medium | Keep abstraction minimal; only extract truly shared code             |
+| Introduce performance regression | Low        | Low    | File operations already I/O bound; abstraction overhead negligible   |
+
+---
+
+## Rollback Plan
+
+1. **Git**: Commit after Steps 1-4 (low-risk changes)
+2. **Git**: Commit after Steps 5-7 (target refactoring)
+3. **Git**: Tag before Step 10 (final state)
+
+If issues arise:
+
+- **Steps 1-4**: Simple revert (pure extraction, no behavior change)
+- **Steps 5-7**: Revert to pre-refactoring commit; targets are independent
+- **Steps 8-10**: Low risk, test-only and metadata changes
+
+---
+
+## Total Estimated Time
+
+- **High priority**: Steps 1-2, 5-7 = ~2 hours 15 minutes
+- **Medium priority**: Step 4 = ~15 minutes
+- **Low priority**: Steps 3, 8, 10 = ~35 minutes
+- **Verification**: Step 9 = ~10 minutes
+
+**Total**: ~3 hours 15 minutes (conservative estimate with testing)
+
+---
+
+## Success Metrics
+
+- [ ] All tests pass (100% CI green)
+- [ ] Binary builds successfully
+- [ ] All CLI commands work (manual smoke test)
+- [ ] Code duplication reduced from ~150 to ~50 lines
+- [ ] Test coverage maintained or improved
+- [ ] `RunAll` and `RunTarget` reduced from ~50 lines each to ~25 lines
+- [ ] Target `Install()` methods reduced from ~50 lines to ~15-20 lines
+- [ ] Zero behavior changes (output identical to before)
+
+---
+
+**Plan Status**: Ready for approval  
+**Next Step**: Wait for APPROVED, then run `/execute`

@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 
@@ -137,10 +136,7 @@ func RunCopilot(ctx context.Context, cfg Config) error {
 	}
 
 	// Build new manifest.
-	curManifest := manifest{
-		Version:     2,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-	}
+	curManifest := newManifestFrom(prevManifest)
 	curManifest.setTarget("copilot", installed)
 
 	// Preserve other targets from previous manifest.
@@ -149,8 +145,6 @@ func RunCopilot(ctx context.Context, cfg Config) error {
 			curManifest.setTarget(name, files)
 		}
 	}
-	// Preserve generated list.
-	curManifest.Generated = prevManifest.Generated
 
 	if cfg.DryRun {
 		cfg.Logger.Info("dry-run", "target", filepath.Join(repoPath, manifestDir, manifestFile))

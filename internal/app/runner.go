@@ -6,34 +6,52 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"time"
 )
 
-// RunAll runs all registered targets and writes a unified manifest.
-// This is the bare `promptherder` command — copies everything everywhere.
-func RunAll(ctx context.Context, targets []Target, cfg Config) error {
+// setupRunner initializes logger, resolves paths, and loads manifest.
+// Returns the absolute repo path, previous manifest, target config, and any error.
+func setupRunner(cfg *Config) (repoPath string, prevManifest manifest, tcfg TargetConfig, err error) {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	}
 
-	repoPath, err := filepath.Abs(cfg.RepoPath)
+	repoPath, err = filepath.Abs(cfg.RepoPath)
 	if err != nil {
-		return fmt.Errorf("resolve repo path: %w", err)
+		return "", manifest{}, TargetConfig{}, fmt.Errorf("resolve repo path: %w", err)
 	}
 
-	prevManifest := readManifest(repoPath, cfg.Logger)
+	prevManifest = readManifest(repoPath, cfg.Logger)
 
-	tcfg := TargetConfig{
+	tcfg = TargetConfig{
 		RepoPath: repoPath,
 		DryRun:   cfg.DryRun,
 		Logger:   cfg.Logger,
 	}
 
-	curManifest := manifest{
-		Version:     2,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		Generated:   prevManifest.Generated,
+	return repoPath, prevManifest, tcfg, nil
+}
+
+// persistAndClean writes the manifest and cleans stale files.
+func persistAndClean(repoPath string, prev, cur manifest, dryRun bool, logger *slog.Logger) error {
+	if dryRun {
+		logger.Info("dry-run", "target", filepath.Join(repoPath, manifestDir, manifestFile))
+	} else {
+		if err := writeManifest(repoPath, cur); err != nil {
+			return err
+		}
 	}
+	return cleanStale(repoPath, prev, cur, dryRun, logger)
+}
+
+// RunAll runs all registered targets and writes a unified manifest.
+// This is the bare `promptherder` command — copies everything everywhere.
+func RunAll(ctx context.Context, targets []Target, cfg Config) error {
+	repoPath, prevManifest, tcfg, err := setupRunner(&cfg)
+	if err != nil {
+		return err
+	}
+
+	curManifest := newManifestFrom(prevManifest)
 
 	for _, t := range targets {
 		if err := ctx.Err(); err != nil {
@@ -48,34 +66,14 @@ func RunAll(ctx context.Context, targets []Target, cfg Config) error {
 		curManifest.setTarget(t.Name(), installed)
 	}
 
-	if cfg.DryRun {
-		cfg.Logger.Info("dry-run", "target", filepath.Join(repoPath, manifestDir, manifestFile))
-	} else {
-		if err := writeManifest(repoPath, curManifest); err != nil {
-			return err
-		}
-	}
-
-	return cleanStale(repoPath, prevManifest, curManifest, cfg.DryRun, cfg.Logger)
+	return persistAndClean(repoPath, prevManifest, curManifest, cfg.DryRun, cfg.Logger)
 }
 
 // RunTarget runs a single named target and updates the manifest.
 func RunTarget(ctx context.Context, target Target, cfg Config) error {
-	if cfg.Logger == nil {
-		cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
-	}
-
-	repoPath, err := filepath.Abs(cfg.RepoPath)
+	repoPath, prevManifest, tcfg, err := setupRunner(&cfg)
 	if err != nil {
-		return fmt.Errorf("resolve repo path: %w", err)
-	}
-
-	prevManifest := readManifest(repoPath, cfg.Logger)
-
-	tcfg := TargetConfig{
-		RepoPath: repoPath,
-		DryRun:   cfg.DryRun,
-		Logger:   cfg.Logger,
+		return err
 	}
 
 	cfg.Logger.Info("installing target", "name", target.Name())
@@ -85,11 +83,7 @@ func RunTarget(ctx context.Context, target Target, cfg Config) error {
 	}
 
 	// Build manifest: preserve all other targets, update this one.
-	curManifest := manifest{
-		Version:     2,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		Generated:   prevManifest.Generated,
-	}
+	curManifest := newManifestFrom(prevManifest)
 	for name, files := range prevManifest.Targets {
 		if name != target.Name() {
 			curManifest.setTarget(name, files)
@@ -97,13 +91,5 @@ func RunTarget(ctx context.Context, target Target, cfg Config) error {
 	}
 	curManifest.setTarget(target.Name(), installed)
 
-	if cfg.DryRun {
-		cfg.Logger.Info("dry-run", "target", filepath.Join(repoPath, manifestDir, manifestFile))
-	} else {
-		if err := writeManifest(repoPath, curManifest); err != nil {
-			return err
-		}
-	}
-
-	return cleanStale(repoPath, prevManifest, curManifest, cfg.DryRun, cfg.Logger)
+	return persistAndClean(repoPath, prevManifest, curManifest, cfg.DryRun, cfg.Logger)
 }

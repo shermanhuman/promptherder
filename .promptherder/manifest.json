@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "generated_at": "2026-02-08T05:50:07Z",
+  "targets": {
+    "antigravity": [
+      ".agent/rules/00-compound-v.md",
+      ".agent/rules/browser.md",
+      ".agent/skills/compound-v-brainstorm/SKILL.md",
+      ".agent/skills/compound-v-debug/SKILL.md",
+      ".agent/skills/compound-v-parallel/SKILL.md",
+      ".agent/skills/compound-v-plan/SKILL.md",
+      ".agent/skills/compound-v-review/SKILL.md",
+      ".agent/skills/compound-v-tdd/SKILL.md",
+      ".agent/workflows/brainstorm.md",
+      ".agent/workflows/execute.md",
+      ".agent/workflows/review.md",
+      ".agent/workflows/write-plan.md"
+    ],
+    "compound-v": [
+      ".promptherder/agent/rules/00-compound-v.md",
+      ".promptherder/agent/rules/browser.md",
+      ".promptherder/agent/skills/compound-v-brainstorm/SKILL.md",
+      ".promptherder/agent/skills/compound-v-debug/SKILL.md",
+      ".promptherder/agent/skills/compound-v-parallel/SKILL.md",
+      ".promptherder/agent/skills/compound-v-plan/SKILL.md",
+      ".promptherder/agent/skills/compound-v-review/SKILL.md",
+      ".promptherder/agent/skills/compound-v-tdd/SKILL.md",
+      ".promptherder/agent/workflows/brainstorm.md",
+      ".promptherder/agent/workflows/execute.md",
+      ".promptherder/agent/workflows/review.md",
+      ".promptherder/agent/workflows/write-plan.md"
+    ],
+    "copilot": [
+      ".github/copilot-instructions.md",
+      ".github/prompts/brainstorm.prompt.md",
+      ".github/prompts/compound-v-brainstorm.prompt.md",
+      ".github/prompts/compound-v-debug.prompt.md",
+      ".github/prompts/compound-v-parallel.prompt.md",
+      ".github/prompts/compound-v-plan.prompt.md",
+      ".github/prompts/compound-v-review.prompt.md",
+      ".github/prompts/compound-v-tdd.prompt.md",
+      ".github/prompts/execute.prompt.md",
+      ".github/prompts/review.prompt.md",
+      ".github/prompts/write-plan.prompt.md"
+    ]
+  }
+}
