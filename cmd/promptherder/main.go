@@ -44,6 +44,39 @@ func main() {
 	fs.BoolVar(&dryRun, "dry-run", false, "Show actions without writing files")
 	fs.BoolVar(&verbose, "v", false, "Verbose logging")
 	fs.BoolVar(&showVersion, "version", false, "Print version and exit")
+
+	fs.Usage = func() {
+		fmt.Fprint(os.Stderr, `promptherder — sync agent configuration across AI coding tools
+
+Usage:
+  promptherder [flags]              Sync all targets
+  promptherder <target> [flags]     Sync a single target (copilot, antigravity)
+  promptherder pull <git-url>       Install a herd from a Git repository
+
+Flags:
+  -dry-run     Show actions without writing files
+  -include     Comma-separated glob patterns to include (default: all)
+  -v           Verbose logging (structured output to stderr)
+  -version     Print version and exit
+
+Settings (.promptherder/settings.json):
+  command_prefix           Prefix for command filenames, e.g. "v-" (default: "")
+  command_prefix_enabled   Enable the prefix (default: false)
+
+  Example:
+    {
+      "command_prefix": "v-",
+      "command_prefix_enabled": true
+    }
+
+Examples:
+  promptherder                                Sync all targets
+  promptherder pull https://github.com/user/herd
+  promptherder copilot -dry-run               Preview copilot sync
+  promptherder antigravity                    Sync antigravity only
+`)
+	}
+
 	_ = fs.Parse(flagArgs)
 
 	// Merge any remaining flag parse args with positional args.

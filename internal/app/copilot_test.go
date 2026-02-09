@@ -658,7 +658,7 @@ func TestBuildCopilotPrompts_Basic(t *testing.T) {
 	mustWrite(t, filepath.Join(wfDir, "brainstorm.md"), "---\ndescription: Brainstorm.\n---\n\n# Brainstorm\n\nDo it.\n")
 	mustWrite(t, filepath.Join(wfDir, "review.md"), "---\ndescription: Review.\n---\n\n# Review\n\nCheck.\n")
 
-	items, err := buildCopilotPrompts(dir)
+	items, err := buildCopilotPrompts(dir, DefaultSettings())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +673,7 @@ func TestBuildCopilotPrompts_Basic(t *testing.T) {
 
 func TestBuildCopilotPrompts_MissingDir(t *testing.T) {
 	dir := t.TempDir()
-	items, err := buildCopilotPrompts(dir)
+	items, err := buildCopilotPrompts(dir, DefaultSettings())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,6 +22,7 @@ type TargetConfig struct {
 	RepoPath string       // absolute path to the repo root
 	DryRun   bool         // if true, log what would happen but don't write
 	Logger   *slog.Logger // structured logger
+	Settings Settings     // user settings from .promptherder/settings.json
 }
 
 // SkillVariantFiles maps uppercase variant filenames to their target names.

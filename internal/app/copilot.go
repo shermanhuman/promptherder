@@ -101,7 +101,7 @@ func (t CopilotTarget) Install(ctx context.Context, cfg TargetConfig) ([]string,
 	}
 
 	// 2. Workflows → .github/prompts/*.prompt.md.
-	promptItems, err := buildCopilotPrompts(cfg.RepoPath)
+	promptItems, err := buildCopilotPrompts(cfg.RepoPath, cfg.Settings)
 	if err != nil {
 		return written, err
 	}
@@ -287,7 +287,7 @@ func buildCopilotPlan(repoPath, srcDir string, sources []sourceFile) []planItem 
 //   - Antigravity frontmatter (description) → Copilot frontmatter (mode, description)
 //   - Strips Antigravity-specific annotations (// turbo, // turbo-all)
 //   - Renames: brainstorm.md → brainstorm.prompt.md
-func buildCopilotPrompts(repoPath string) ([]planItem, error) {
+func buildCopilotPrompts(repoPath string, settings Settings) ([]planItem, error) {
 	wfRoot := filepath.Join(repoPath, filepath.FromSlash(workflowSourceDir))
 
 	if _, err := os.Stat(wfRoot); os.IsNotExist(err) {
@@ -314,7 +314,7 @@ func buildCopilotPrompts(repoPath string) ([]planItem, error) {
 		stem := strings.TrimSuffix(entry.Name(), ".md")
 
 		plan = append(plan, planItem{
-			Target:  filepath.Join(repoPath, filepath.FromSlash(copilotPromptsDir), stem+".prompt.md"),
+			Target:  filepath.Join(repoPath, filepath.FromSlash(copilotPromptsDir), settings.PrefixCommand(stem+".prompt.md")),
 			Content: promptContent,
 			Sources: []string{stem},
 		})

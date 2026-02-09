@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// setupRunner initializes logger, resolves paths, and loads manifest.
+// setupRunner initializes logger, resolves paths, loads manifest and settings.
 // Returns the absolute repo path, previous manifest, target config, and any error.
 func setupRunner(cfg *Config) (repoPath string, prevManifest manifest, tcfg TargetConfig, err error) {
 	if cfg.Logger == nil {
@@ -22,10 +22,20 @@ func setupRunner(cfg *Config) (repoPath string, prevManifest manifest, tcfg Targ
 
 	prevManifest = readManifest(repoPath, cfg.Logger)
 
+	settings, err := LoadSettings(repoPath)
+	if err != nil {
+		return "", manifest{}, TargetConfig{}, fmt.Errorf("load settings: %w", err)
+	}
+
+	if settings.CommandPrefixEnabled {
+		cfg.Logger.Info("settings", "prefix", settings.CommandPrefix)
+	}
+
 	tcfg = TargetConfig{
 		RepoPath: repoPath,
 		DryRun:   cfg.DryRun,
 		Logger:   cfg.Logger,
+		Settings: settings,
 	}
 
 	return repoPath, prevManifest, tcfg, nil

@@ -88,8 +88,16 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 
-		targetPath := filepath.Join(cfg.RepoPath, antigravityTarget, rel)
-		targetRel := filepath.ToSlash(filepath.Join(antigravityTarget, relSlash))
+		// Apply command prefix to workflow files (not skills).
+		outputRel := rel
+		if isInWorkflowDir(relSlash) {
+			dir := filepath.Dir(rel)
+			base := filepath.Base(rel)
+			outputRel = filepath.Join(dir, cfg.Settings.PrefixCommand(base))
+		}
+
+		targetPath := filepath.Join(cfg.RepoPath, antigravityTarget, outputRel)
+		targetRel := filepath.ToSlash(filepath.Join(antigravityTarget, filepath.ToSlash(outputRel)))
 
 		if cfg.DryRun {
 			cfg.Logger.Info("dry-run", "target", targetRel, "source", sourceSlash)
@@ -130,4 +138,10 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 // skills/*/ directory (e.g. "skills/compound-v-tdd/SKILL.md").
 func isInSkillDir(relSlash string) bool {
 	return strings.HasPrefix(relSlash, "skills/") && strings.Count(relSlash, "/") >= 2
+}
+
+// isInWorkflowDir returns true if the slash-separated relative path is inside
+// the workflows/ directory (e.g. "workflows/plan.md").
+func isInWorkflowDir(relSlash string) bool {
+	return strings.HasPrefix(relSlash, "workflows/")
 }
