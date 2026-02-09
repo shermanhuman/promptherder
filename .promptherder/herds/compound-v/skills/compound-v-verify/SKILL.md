@@ -15,12 +15,12 @@ Before reporting a task as done, run through this checklist.
 
 ## The checklist
 
-1. **Requirements met?** Re-read the task description. Have you missed details or edge cases?
-2. **Tests passing?** Run the full test suite, not just the tests you wrote.
-3. **Code clean?** No commented-out code. No debug prints. No placeholder TODOs.
-4. **Warnings?** Check for linter warnings, compiler warnings, or deprecation notices.
-5. **Verification commands?** Run the exact verification commands from the plan step.
-6. **Documentation?** If you changed behavior or APIs, update relevant docs.
+1. **Requirements** — Re-read the task description. Confirm all requirements are met and no details or edge cases were missed.
+2. **Tests** — Run the full test suite, not just the tests you wrote. Confirm all pass.
+3. **Code cleanliness** — Remove commented-out code, debug prints, and placeholder TODOs.
+4. **Warnings** — Check for and resolve linter warnings, compiler warnings, and deprecation notices.
+5. **Verification commands** — Run the exact verification commands from the plan step. Confirm expected output.
+6. **Documentation** — Update relevant docs if you changed behavior, APIs, CLI flags, or configuration.
 
 ## Statement of completion
 

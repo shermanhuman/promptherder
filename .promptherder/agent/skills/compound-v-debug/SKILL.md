@@ -17,7 +17,7 @@ description: Systematic debugging — reproduce, isolate, form hypotheses, instr
 
 1. **Reproduce**
    - Capture exact error, inputs, environment, command.
-2. **Research** (parallel)
+2. **Research** (parallel — use `waitForPreviousTools: false` for all calls)
    - `search_web` for the exact error message or symptom.
    - `search_web` for known issues in the relevant library/framework version (use `stack.md` versions).
    - Read related source files in parallel.

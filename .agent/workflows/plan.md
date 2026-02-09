@@ -28,15 +28,21 @@ Write to `.promptherder/convos/<slug>/`:
 
 After presenting the plan, always end with:
 
-> **Reply APPROVED to proceed, SHOW DECISIONS to audit my reasoning, or give feedback.**
+> Run `/execute <slug>` to proceed, `SHOW DECISIONS` to audit, `DECLINE` to reject, or give feedback.
 > Task: `<slug>`
 
-**APPROVED** → Update status to `approved` in plan.md. Reply: "Plan approved. Run `/execute` to begin. Task: `<slug>`". Do NOT implement.
+**`/execute`** → The user running `/execute` IS the approval. The execute workflow sets status to `approved`. Do NOT implement.
 
-**SHOW DECISIONS** → Print contents of `decisions.md`. Re-prompt for approval.
+**`SHOW DECISIONS`** → Print contents of `decisions.md`. Re-prompt.
+
+**`DECLINE`** → Update status to `declined` in plan.md. Reply: "Plan declined. Task: `<slug>`". Stop.
 
 **Feedback** → Incorporate, re-research if needed, update plan and decisions, re-present.
 
 ### Deferred ideas
 
-List ideas with future value when presenting the plan. Ask: "Should I add these to `future-tasks.md`?" Only append to `.promptherder/future-tasks.md` after user confirms.
+List ideas with future value when presenting the plan.
+
+> Add these to `future-tasks.md`? `yes` / `no`
+
+Only append to `.promptherder/future-tasks.md` after user confirms.

@@ -28,12 +28,13 @@ Determine the **desired end result** — the single sentence that defines succes
 
 ### Phase 2: Research (autonomous — no user interaction)
 
-Do all of this in parallel, silently:
+Do all of this **in parallel** (multiple `search_web` + `view_file` calls with `waitForPreviousTools: false`):
 
 - `search_web` for best practices, alternatives, and pitfalls. Scope to versions in `stack.md`.
 - `view_file_outline` on relevant project files.
 - Read `.promptherder/future-tasks.md` if it exists — check if any deferred ideas are relevant.
 - Read `.agent/rules/stack.md` and `.agent/rules/structure.md` if they exist.
+- Read `.promptherder/hard-rules.md` if it exists — all rules must be respected.
 
 ### Phase 3: Think (autonomous — no user interaction)
 
@@ -46,16 +47,18 @@ For each approach you consider, evaluate:
 
 Apply these filters yourself:
 
-- YAGNI — is this the simplest approach?
-- Does it solve the actual problem or a hypothetical one?
-- What are the risks? Are they manageable?
-- Are there rollback options?
+- **DRY** — Identify repeated logic across the plan. Extract shared patterns into reusable steps. If two steps do the same thing, merge them. Update logic in one place — changes reflect everywhere.
+- **YAGNI** — Only plan features you actually need right now. Focus on current requirements, not hypothetical future ones. If a step exists "just in case," cut it.
+- **Don't overengineer** — Focus on the simplest solution that solves the core problem. Ask: "What's the minimum viable version?" If a step adds complexity without clear necessity, skip it. Keep it lean, functional, and maintainable.
+- Confirm the approach solves the actual problem, not a hypothetical one.
+- Identify risks and verify they are manageable.
+- Ensure rollback options exist.
 
 **Reject bad ideas yourself.** Only surface ideas with verdict `ask` to the user.
 
 #### Persist decisions
 
-Write the full decisions table to `decisions.md` (path determined by the calling workflow):
+Write the full decisions table to `decisions.md`. The calling workflow determines the full path (typically `.promptherder/convos/<slug>/decisions.md`):
 
 ```markdown
 # Decisions: <title>
@@ -90,10 +93,22 @@ Present the plan in a **single response**:
 
 ## Plan
 
-1. Step name
-   - Files: `path/to/file`
-   - Change: what changes (1-2 bullets)
-   - Verify: command to verify
+### 1. Step name
+
+- **Files:** `path/to/file`
+- **Change:** what changes (1-2 bullets)
+  - Test → Code → Verify order
+- **Verify:** command to verify
+
+## What this builds
+
+### Happy path
+
+1. [numbered walkthrough of user-facing flow after implementation]
+
+### Filesystem tree
+
+[tree showing files created/modified]
 
 ## Risks & mitigations
 
@@ -102,6 +117,11 @@ Present the plan in a **single response**:
 ## Rollback plan
 
 <how to undo>
+
+## References
+
+- Full plan: `.promptherder/convos/<slug>/plan.md`
+- Decisions: `.promptherder/convos/<slug>/decisions.md`
 ```
 
 #### Batch questions
@@ -128,9 +148,9 @@ If you identified ideas with future value, list them:
 ```
 **Ideas I'd defer to future tasks:**
 - <idea> — <brief rationale>
-
-Should I add these to `future-tasks.md`?
 ```
+
+> Add these to `future-tasks.md`? `yes` / `no`
 
 **Only append after the user confirms.**
 
@@ -151,11 +171,14 @@ Should I add these to `future-tasks.md`?
 - ✅ Kill bad ideas yourself with rationale (visible in audit)
 - ✅ State assumptions explicitly so the user can correct them
 - ✅ Confirm deferred ideas with the user before adding to `future-tasks.md`
+- ✅ Include "What this builds" section with happy path and filesystem tree
 
 ## Planning rules
 
 - Steps should be **small** (2–10 minutes each).
 - Every step must include **verification**.
+- Each step must show **test → code → verify** order where applicable.
+- If the plan changes the codebase structure, show a **before/after filesystem tree**.
 - Prefer **incremental deliverables** (avoid "big bang" edits).
 - Identify **rollback** and **risk controls** early.
 - Group independent steps for **parallel execution** where possible.
@@ -165,8 +188,10 @@ Should I add these to `future-tasks.md`?
 ## Plan step format
 
 ```
-1. Step name
-   - Files: `path/to/file.ext`, `...`
-   - Change: (1–2 bullets)
-   - Verify: (exact commands or checks)
+### 1. Step name
+- **Files:** `path/to/file.ext`, `...`
+- **Change:** (1–2 bullets)
+  - Test: what test to write first
+  - Code: what to implement
+- **Verify:** (exact commands or checks)
 ```

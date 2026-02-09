@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated_at": "2026-02-08T23:06:54Z",
+  "generated_at": "2026-02-09T03:39:33Z",
   "targets": {
     "antigravity": [
       ".agent/rules/browser.md",
@@ -15,7 +15,8 @@
       ".agent/workflows/execute.md",
       ".agent/workflows/idea.md",
       ".agent/workflows/plan.md",
-      ".agent/workflows/review.md"
+      ".agent/workflows/review.md",
+      ".agent/workflows/rule.md"
     ],
     "copilot": [
       ".github/copilot-instructions.md",
@@ -28,7 +29,8 @@
       ".github/prompts/execute.prompt.md",
       ".github/prompts/idea.prompt.md",
       ".github/prompts/plan.prompt.md",
-      ".github/prompts/review.prompt.md"
+      ".github/prompts/review.prompt.md",
+      ".github/prompts/rule.prompt.md"
     ],
     "herds": [
       ".promptherder/agent/rules/browser.md",
@@ -44,7 +46,8 @@
       ".promptherder/agent/workflows/execute.md",
       ".promptherder/agent/workflows/idea.md",
       ".promptherder/agent/workflows/plan.md",
-      ".promptherder/agent/workflows/review.md"
+      ".promptherder/agent/workflows/review.md",
+      ".promptherder/agent/workflows/rule.md"
     ]
   }
 }
