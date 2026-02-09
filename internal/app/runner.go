@@ -61,7 +61,7 @@ func RunAll(ctx context.Context, targets []Target, cfg Config) error {
 	}
 
 	if len(herds) == 0 {
-		cfg.Logger.Warn("no herds found in .promptherder/herds/ — run `promptherder pull <url>` to install a herd")
+		cfg.Logger.Warn("no herds found — run `promptherder pull <url>` to install one")
 	} else {
 		// Clean previous herd files from agent dir before re-merging.
 		if err := cleanAgentDir(repoPath, prevManifest, cfg.DryRun, cfg.Logger); err != nil {
@@ -87,7 +87,7 @@ func RunAll(ctx context.Context, targets []Target, cfg Config) error {
 			return err
 		}
 
-		cfg.Logger.Info("installing target", "name", t.Name())
+		cfg.Logger.Info("target", "name", t.Name())
 		installed, err := t.Install(ctx, tcfg)
 		if err != nil {
 			return fmt.Errorf("target %s: %w", t.Name(), err)
@@ -105,7 +105,7 @@ func RunTarget(ctx context.Context, target Target, cfg Config) error {
 		return err
 	}
 
-	cfg.Logger.Info("installing target", "name", target.Name())
+	cfg.Logger.Info("target", "name", target.Name())
 	installed, err := target.Install(ctx, tcfg)
 	if err != nil {
 		return fmt.Errorf("target %s: %w", target.Name(), err)

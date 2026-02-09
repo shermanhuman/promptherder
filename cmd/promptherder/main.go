@@ -58,7 +58,15 @@ func main() {
 	if verbose {
 		level = slog.LevelDebug
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+
+	var logger *slog.Logger
+	if verbose {
+		// Verbose: structured slog output to stderr (for debugging).
+		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	} else {
+		// Normal: pretty output to stdout.
+		logger = slog.New(app.NewUIHandler(os.Stdout, level))
+	}
 
 	// Always use current working directory as repo root.
 	cwd, err := os.Getwd()

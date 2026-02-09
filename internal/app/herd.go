@@ -153,7 +153,7 @@ func mergeHerds(ctx context.Context, repoPath string, herds []herdOnDisk, m mani
 			if m.isGenerated(baseName) {
 				targetPath := filepath.Join(agentRoot, filepath.FromSlash(relSlash))
 				if _, err := os.Stat(targetPath); err == nil {
-					cfg.Logger.Info("skipping generated file", "file", relSlash, "herd", herd.Meta.Name)
+					cfg.Logger.Debug("skipping generated file", "file", relSlash, "herd", herd.Meta.Name)
 					return nil
 				}
 			}

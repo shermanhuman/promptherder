@@ -23,7 +23,7 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 	srcRoot := filepath.Join(cfg.RepoPath, filepath.FromSlash(antigravitySource))
 
 	if _, err := os.Stat(srcRoot); os.IsNotExist(err) {
-		cfg.Logger.Info("no source directory found", "dir", antigravitySource)
+		cfg.Logger.Debug("no source directory found", "dir", antigravitySource)
 		return nil, nil
 	}
 
@@ -66,7 +66,7 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 				// Check if our variant file exists; if so, skip the generic.
 				variantPath := filepath.Join(filepath.Dir(path), "ANTIGRAVITY.md")
 				if _, err := os.Stat(variantPath); err == nil {
-					cfg.Logger.Info("skipping generic skill (variant exists)", "file", relSlash)
+					cfg.Logger.Debug("skipping generic skill (variant exists)", "file", relSlash)
 					return nil
 				}
 			}
@@ -76,7 +76,7 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 		if m.isGenerated(baseName) {
 			targetPath := filepath.Join(cfg.RepoPath, antigravityTarget, rel)
 			if _, err := os.Stat(targetPath); err == nil {
-				cfg.Logger.Info("skipping generated file", "file", relSlash)
+				cfg.Logger.Debug("skipping generated file", "file", relSlash)
 				return nil
 			}
 			// If the generated file doesn't exist yet, allow writing it.

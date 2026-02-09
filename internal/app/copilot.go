@@ -97,7 +97,7 @@ func (t CopilotTarget) Install(ctx context.Context, cfg TargetConfig) ([]string,
 			return written, err
 		}
 	} else {
-		cfg.Logger.Info("no source files found", "dir", srcDir)
+		cfg.Logger.Debug("no source files found", "dir", srcDir)
 	}
 
 	// 2. Workflows → .github/prompts/*.prompt.md.
