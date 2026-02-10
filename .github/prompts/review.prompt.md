@@ -12,9 +12,13 @@ Invoke the `compound-v-review` skill and follow it exactly.
 
 ### Slug resolution
 
-1. If the user provided a kebab-case slug (e.g. `/review fix-this`), use it.
-2. If continuing a previous task, check `.promptherder/convos/` for a matching folder.
-3. Otherwise, generate a short kebab-case name (2-4 words) from the task description.
+Invoke the `compound-v-persist` skill to resolve the target `<slug>` folder.
+
+**Logic:**
+
+- If invoked as part of `/execute`, reuse the execution slug.
+- If standalone, default to the most recent conversation (the skill handles this).
+- Only create a new slug if the user explicitly requests a fresh context.
 
 ### Check targeting
 
@@ -26,7 +30,11 @@ Both can be combined with a slug: `/review fix-this security`, `/review fix-this
 
 ### Persist (mandatory)
 
-Write the review to `.promptherder/convos/<slug>/review.md`.
+Write the review to `.promptherder/convos/<slug>/review-<description>.md`.
+
+- Use the user's provided slug (e.g. `/review fix-auth` → `review-fix-auth.md`).
+- If no slug provided, generate a short 1-3 word description (e.g. `review-security.md`, `review-wip.md`).
+
 Confirm it exists by listing `.promptherder/convos/<slug>/`.
 
 Do not implement changes in this workflow unless `YOLO` mode is active.

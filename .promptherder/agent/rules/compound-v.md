@@ -22,10 +22,11 @@ You have the Compound V methodology available. Use these workflows and skills:
 - `compound-v-debug` — systematic debugging
 - `compound-v-parallel` — parallel execution reasoning
 - `compound-v-verify` — verification before completion
+- `compound-v-persist` — resolves conversation slugs and paths
 
 ## Manual rules
 
-- `@browser.md` — browser-based UI testing
+- `browser.md` — browser-based UI testing (manual trigger)
 
 ## Output formatting
 
@@ -36,7 +37,14 @@ All workflows and skills must follow these formatting rules:
 - **H1** for titles, **H2** for sections, **H3** for subsections
 - `---` dividers between major sections
 - Tables for structured data (findings, decisions, comparisons)
-- Bold for key terms, code blocks for paths/commands/filenames
+- Ordered lists for sequential steps. Unordered lists when order doesn't matter.
+
+### Semantic text formatting
+
+- **Bold** for key terms and action verbs in steps: "**Read** the file. **Append** the rule."
+- `Inline code` for anything the user might copy: commands, paths, filenames, flags, slugs
+- _Italic_ for caveats, assumptions, and de-emphasized metadata: _"This assumes the plan exists."_
+- Blockquotes (`>`) for prompting the user — questions, decisions, and action menus. Not for informational text.
 
 ### Severity indicators (braille dot patterns)
 
@@ -51,11 +59,13 @@ Finding IDs are mandatory in reviews: `⠿ **B1**`, `⠷ **M2**`, `⠴ **m3**`, 
 
 ### Decision prompts
 
-All user decision points must use markdown blockquotes (`>`). Every point where the user must choose an action gets a blockquote:
+Examples:
 
 - **After plan:** `> Run /execute <slug> to proceed, SHOW DECISIONS to audit, DECLINE to reject, or give feedback.`
-- **After review findings:** `> SKIP to move on, FIX to fix ⠿⠷, FIX ALL to fix everything, or give feedback. Task: <slug>`
+- **After review findings:** `> FIX to fix ⠿⠷, FIX ALL to fix everything, SKIP to move on, or give feedback.`
 - **Deferred ideas:** `> Add these to future-tasks.md? yes / no`
+
+Task slugs go on the next line in italics: _Task: `<slug>`_
 
 ### Short names first
 

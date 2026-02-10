@@ -27,4 +27,4 @@ Skills are treated as packages. The subdirectory serves as the container for the
 
 ## Copilot Support
 
-For GitHub Copilot, these skills are automatically translated into prompt files (`.github/prompts/*.prompt.md`) by the `copilot` target (defined in `internal/app/copilot.go`). Copilot does not natively consume `SKILL.md` files in this project's configuration, but we maintain the source of truth here for consistency across agent platforms.
+For GitHub Copilot, these skills are automatically translated into prompt files (`.github/prompts/*.prompt.md`) by the promptherder `copilot` target. Copilot does not natively consume `SKILL.md` files, so promptherder handles the translation to maintain a single source of truth across agent platforms.

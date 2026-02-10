@@ -12,10 +12,13 @@ Invoke the `compound-v-plan` skill and follow it exactly.
 
 ### Slug resolution
 
-1. If the user provided a kebab-case slug (e.g. `/plan fix-auth`), use it.
-2. If continuing a previous task, check `.promptherder/convos/` for a matching folder.
-3. Otherwise, generate a short kebab-case name (2-4 words) from the task description.
-4. Check if `.promptherder/convos/<slug>/plan.md` already exists. If so, read it and `decisions.md` if present, then resume from the current state (don't start over).
+Invoke the `compound-v-persist` skill to resolve the target `<slug>` folder.
+
+**Logic:**
+
+- If updating an existing plan, target the existing folder.
+- If creating a **New Plan**, the skill will generate a new `YYYY-MM-DD-slug`.
+- If the user provided a specific slug, pass it to the skill.
 
 ### Artifacts
 
@@ -29,7 +32,8 @@ Write to `.promptherder/convos/<slug>/`:
 After presenting the plan, always end with:
 
 > Run `/execute <slug>` to proceed, `SHOW DECISIONS` to audit, `DECLINE` to reject, or give feedback.
-> Task: `<slug>`
+
+_Task: `<slug>`_
 
 **`/execute`** → The user running `/execute` IS the approval. The execute workflow sets status to `approved`. Do NOT implement.
 

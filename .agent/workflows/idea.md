@@ -8,7 +8,7 @@ description: Add an idea to the future tasks list. Lightweight, no ceremony. Use
 
 Append the user's idea to `.promptherder/future-tasks.md`.
 
-> **What this does:** Saves an idea for later so you don't lose it. Ideas are stored as a checklist in `.promptherder/future-tasks.md` and can be pulled into a `/plan` when the time is right.
+**What this does:** Saves an idea for later so you don't lose it. Ideas are stored as a checklist in `.promptherder/future-tasks.md` and can be pulled into a `/plan` when the time is right.
 
 ## Steps
 

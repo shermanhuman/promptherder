@@ -8,7 +8,7 @@ description: Add a hard rule to the project's always-on prompt. Lightweight, no 
 
 Append the user's rule to `.promptherder/hard-rules.md`.
 
-> **What this does:** Adds a rule that the AI must always follow in this project. Hard rules are injected into every session automatically. Use this for project-specific standards, constraints, or guardrails (e.g., "never use eval", "all API routes require auth", "prefer composition over inheritance").
+**What this does:** Adds a rule that the AI must always follow in this project. Hard rules are injected into every session automatically. Use this for project-specific standards, constraints, or guardrails (e.g., "never use eval", "all API routes require auth", "prefer composition over inheritance").
 
 ## Steps
 

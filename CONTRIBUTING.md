@@ -312,13 +312,15 @@ Variant filenames use **uppercase target names** to match the `SKILL.md` convent
 
 ### When to create a variant
 
-Create a variant when the skill needs **agent-specific API details**. Example:
+Create a variant when the skill needs **agent-specific behavior**. Example:
 
 | Content                                       | Where it belongs                   |
 | --------------------------------------------- | ---------------------------------- |
 | "Group independent steps into batches"        | `SKILL.md` (methodology)           |
-| "Use `waitForPreviousTools: false`"           | `ANTIGRAVITY.md` (Antigravity API) |
-| "Use concurrent tool calls in the same block" | `COPILOT.md` (Copilot API)         |
+| IDE-specific file paths or tool names         | Variant file for that target       |
+| Agent-specific resource constraints           | Variant file for that target       |
+
+**Note:** Parallel tool calls work the same across all major platforms (Claude, GPT, Gemini) — invoke multiple tools in the same response. No variant needed for parallelism.
 
 ### Adding a variant for a new target
 

@@ -14,9 +14,10 @@ Invoke skills as needed during execution: `compound-v-tdd`, `compound-v-debug`, 
 
 ### Slug resolution
 
-1. If the user provided a kebab-case slug (e.g. `/execute fix-this`), use it.
-2. If continuing a previous task, check `.promptherder/convos/` for a matching folder.
-3. Otherwise, generate a short kebab-case name (2-4 words) from the task description.
+Invoke the `compound-v-persist` skill to resolve the target `<slug>` folder.
+
+- If the user provided a slug (e.g. `/execute fix-this`), pass it to the skill.
+- The plan must already exist in the resolved folder.
 
 ### Preconditions (do not skip)
 
@@ -50,14 +51,14 @@ If the plan file does not exist, stop and tell the user to run `/plan` first.
    - List exact commands to test the happy path end-to-end
    - List edge cases worth testing manually
    - Show expected output for each command
-3. Write summary to `.promptherder/convos/<slug>/review.md`.
+3. Write summary to `.promptherder/convos/<slug>/review-<description>.md`.
 4. Confirm artifacts exist by listing `.promptherder/convos/<slug>/`.
 
 **`YOLO` mode:**
 
 1. Run `compound-v-review` in YOLO mode. It handles auto-fixing.
 2. Output summary: what was built, what was found, what was fixed.
-3. Write summary to `.promptherder/convos/<slug>/review.md`.
+3. Write summary to `.promptherder/convos/<slug>/review-<description>.md`.
 4. Confirm artifacts.
 
 Stop after completing the finish step.

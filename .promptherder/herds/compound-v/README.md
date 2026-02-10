@@ -32,6 +32,7 @@ compound-v/
 │   ├── browser.md      # Browser-based UI testing rules
 │   └── compound-v.md   # Core methodology rules
 ├── skills/
+│   ├── README.md       # Skills structure documentation
 │   ├── compound-v-debug/
 │   ├── compound-v-parallel/
 │   ├── compound-v-plan/
@@ -40,8 +41,10 @@ compound-v/
 │   └── compound-v-verify/
 └── workflows/
     ├── execute.md
+    ├── idea.md
     ├── plan.md
-    └── review.md
+    ├── review.md
+    └── rule.md
 ```
 
 ## License
