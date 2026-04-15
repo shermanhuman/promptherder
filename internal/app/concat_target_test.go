@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ func TestBuildConcatOutput_WithRules(t *testing.T) {
 	mustWrite(t, filepath.Join(srcDir, "rule-b.md"), "# Rule B\nMore stuff.\n")
 
 	header := "<!-- test -->\n"
-	content, names, err := buildConcatOutput(dir, defaultSourceDir, nil, header)
+	content, names, err := buildConcatOutput(context.Background(), dir, defaultSourceDir, nil, header)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +54,7 @@ func TestBuildConcatOutput_WithHardRules(t *testing.T) {
 	phDir := filepath.Join(dir, ".promptherder")
 	mustWrite(t, filepath.Join(phDir, "hard-rules.md"), "---\ntrigger: always_on\n---\n\n# Hard Rules\n\n- Never do bad things.\n")
 
-	content, names, err := buildConcatOutput(dir, defaultSourceDir, nil, "<!-- test -->\n")
+	content, names, err := buildConcatOutput(context.Background(), dir, defaultSourceDir, nil, "<!-- test -->\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +72,7 @@ func TestBuildConcatOutput_NoSources(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	content, names, err := buildConcatOutput(dir, defaultSourceDir, nil, "<!-- test -->\n")
+	content, names, err := buildConcatOutput(context.Background(), dir, defaultSourceDir, nil, "<!-- test -->\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func TestBuildConcatOutput_SkipsApplyToRules(t *testing.T) {
 	mustWrite(t, filepath.Join(srcDir, "global.md"), "# Global\n")
 	mustWrite(t, filepath.Join(srcDir, "scoped.md"), "---\napplyTo: \"**/*.go\"\n---\n# Scoped\n")
 
-	content, names, err := buildConcatOutput(dir, defaultSourceDir, nil, "<!-- test -->\n")
+	content, names, err := buildConcatOutput(context.Background(), dir, defaultSourceDir, nil, "<!-- test -->\n")
 	if err != nil {
 		t.Fatal(err)
 	}

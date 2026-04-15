@@ -8,16 +8,15 @@ import (
 	"testing"
 )
 
-func TestClaudeTarget_WritesCLAUDEMD(t *testing.T) {
+func TestSimpleConcatTarget_Claude(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	// Create source rules.
 	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "test-rule.md"), "# Test Rule\nHello.\n")
 
-	target := ClaudeTarget{}
+	target := NewClaudeTarget(nil)
 	cfg := TargetConfig{
 		RepoPath: dir,
 		DryRun:   false,
@@ -47,7 +46,7 @@ func TestClaudeTarget_WritesCLAUDEMD(t *testing.T) {
 	}
 }
 
-func TestCodexTarget_WritesAGENTSMD(t *testing.T) {
+func TestSimpleConcatTarget_Codex(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -55,7 +54,7 @@ func TestCodexTarget_WritesAGENTSMD(t *testing.T) {
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "test.md"), "# Codex Rule\n")
 
-	target := CodexTarget{}
+	target := NewCodexTarget(nil)
 	installed, err := target.Install(context.Background(), TargetConfig{
 		RepoPath: dir,
 		Logger:   testLogger(t),
@@ -73,7 +72,7 @@ func TestCodexTarget_WritesAGENTSMD(t *testing.T) {
 	}
 }
 
-func TestCursorTarget_WritesToCorrectPath(t *testing.T) {
+func TestSimpleConcatTarget_Cursor(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -81,7 +80,7 @@ func TestCursorTarget_WritesToCorrectPath(t *testing.T) {
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "test.md"), "# Cursor Rule\n")
 
-	target := CursorTarget{}
+	target := NewCursorTarget(nil)
 	installed, err := target.Install(context.Background(), TargetConfig{
 		RepoPath: dir,
 		Logger:   testLogger(t),
@@ -100,7 +99,7 @@ func TestCursorTarget_WritesToCorrectPath(t *testing.T) {
 	}
 }
 
-func TestWindsurfTarget_WritesToCorrectPath(t *testing.T) {
+func TestSimpleConcatTarget_Windsurf(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -108,7 +107,7 @@ func TestWindsurfTarget_WritesToCorrectPath(t *testing.T) {
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "test.md"), "# Windsurf Rule\n")
 
-	target := WindsurfTarget{}
+	target := NewWindsurfTarget(nil)
 	installed, err := target.Install(context.Background(), TargetConfig{
 		RepoPath: dir,
 		Logger:   testLogger(t),
@@ -123,7 +122,7 @@ func TestWindsurfTarget_WritesToCorrectPath(t *testing.T) {
 	}
 }
 
-func TestClineTarget_WritesToCorrectPath(t *testing.T) {
+func TestSimpleConcatTarget_Cline(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -131,7 +130,7 @@ func TestClineTarget_WritesToCorrectPath(t *testing.T) {
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "test.md"), "# Cline Rule\n")
 
-	target := ClineTarget{}
+	target := NewClineTarget(nil)
 	installed, err := target.Install(context.Background(), TargetConfig{
 		RepoPath: dir,
 		Logger:   testLogger(t),
@@ -146,7 +145,7 @@ func TestClineTarget_WritesToCorrectPath(t *testing.T) {
 	}
 }
 
-func TestClaudeTarget_DryRun(t *testing.T) {
+func TestSimpleConcatTarget_DryRun(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -154,7 +153,7 @@ func TestClaudeTarget_DryRun(t *testing.T) {
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "test.md"), "# Rule\n")
 
-	target := ClaudeTarget{}
+	target := NewClaudeTarget(nil)
 	installed, err := target.Install(context.Background(), TargetConfig{
 		RepoPath: dir,
 		DryRun:   true,
@@ -174,11 +173,11 @@ func TestClaudeTarget_DryRun(t *testing.T) {
 	}
 }
 
-func TestClaudeTarget_NoSources(t *testing.T) {
+func TestSimpleConcatTarget_NoSources(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	target := ClaudeTarget{}
+	target := NewClaudeTarget(nil)
 	installed, err := target.Install(context.Background(), TargetConfig{
 		RepoPath: dir,
 		Logger:   testLogger(t),
@@ -188,5 +187,47 @@ func TestClaudeTarget_NoSources(t *testing.T) {
 	}
 	if installed != nil {
 		t.Errorf("expected nil installed, got %v", installed)
+	}
+}
+
+func TestSimpleConcatTarget_ContextCancellation(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	mustMkdir(t, srcDir)
+	mustWrite(t, filepath.Join(srcDir, "test.md"), "# Rule\n")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately.
+
+	target := NewClaudeTarget(nil)
+	_, err := target.Install(ctx, TargetConfig{
+		RepoPath: dir,
+		Logger:   testLogger(t),
+	})
+	if err == nil {
+		t.Error("expected context cancellation error")
+	}
+}
+
+func TestSimpleConcatTarget_Name(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		target SimpleConcatTarget
+		name   string
+	}{
+		{NewClaudeTarget(nil), "claude"},
+		{NewCodexTarget(nil), "codex"},
+		{NewCursorTarget(nil), "cursor"},
+		{NewWindsurfTarget(nil), "windsurf"},
+		{NewClineTarget(nil), "cline"},
+	}
+
+	for _, tt := range tests {
+		if tt.target.Name() != tt.name {
+			t.Errorf("expected name %q, got %q", tt.name, tt.target.Name())
+		}
 	}
 }

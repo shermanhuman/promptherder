@@ -123,11 +123,11 @@ Examples:
 	targetRegistry := map[string]app.Target{
 		"copilot":     app.CopilotTarget{Include: cfg.Include},
 		"antigravity": app.AntigravityTarget{},
-		"claude":      app.ClaudeTarget{Include: cfg.Include},
-		"codex":       app.CodexTarget{Include: cfg.Include},
-		"cursor":      app.CursorTarget{Include: cfg.Include},
-		"windsurf":    app.WindsurfTarget{Include: cfg.Include},
-		"cline":       app.ClineTarget{Include: cfg.Include},
+		"claude":      app.NewClaudeTarget(cfg.Include),
+		"codex":       app.NewCodexTarget(cfg.Include),
+		"cursor":      app.NewCursorTarget(cfg.Include),
+		"windsurf":    app.NewWindsurfTarget(cfg.Include),
+		"cline":       app.NewClineTarget(cfg.Include),
 	}
 
 	// Load settings for agent filtering.

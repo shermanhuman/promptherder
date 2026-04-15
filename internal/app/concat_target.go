@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,11 @@ import (
 // cursor, windsurf, cline).
 //
 // Returns the concatenated content, source names list, and any error.
-func buildConcatOutput(repoPath, srcDir string, include []string, header string) ([]byte, []string, error) {
+func buildConcatOutput(ctx context.Context, repoPath, srcDir string, include []string, header string) ([]byte, []string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
 	sources, err := readSources(repoPath, srcDir, include)
 	if err != nil {
 		return nil, nil, err
@@ -156,8 +161,8 @@ func buildConcatWorkflowsSection(repoPath string) ([]byte, []string, error) {
 
 // buildFullConcatTarget builds a complete single-file target output including
 // rules, skills, and workflows.
-func buildFullConcatTarget(repoPath, srcDir string, include []string, header, variantName string) ([]byte, []string, error) {
-	content, names, err := buildConcatOutput(repoPath, srcDir, include, header)
+func buildFullConcatTarget(ctx context.Context, repoPath, srcDir string, include []string, header, variantName string) ([]byte, []string, error) {
+	content, names, err := buildConcatOutput(ctx, repoPath, srcDir, include, header)
 	if err != nil {
 		return nil, nil, err
 	}
