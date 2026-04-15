@@ -13,6 +13,54 @@ import (
 	"strings"
 )
 
+// ResolveAndPull resolves a pull argument (URL or alias) and pulls herds.
+// If the argument is a URL, it pulls directly.
+// If it's a short name, it looks up aliases (user config → embedded defaults).
+// On first alias use, writes default config to disk for discoverability.
+func ResolveAndPull(ctx context.Context, arg string, cfg PullConfig) error {
+	// URL detection — pass through to Pull directly.
+	if isURL(arg) {
+		return Pull(ctx, arg, cfg)
+	}
+
+	// Load aliases.
+	aliases, source, err := LoadAliases()
+	if err != nil {
+		return fmt.Errorf("load aliases: %w", err)
+	}
+
+	// Auto-scaffold config file on first alias use.
+	if source == "default" {
+		if path, pathErr := AliasesConfigPath(); pathErr == nil {
+			if writeErr := WriteDefaultAliases(path); writeErr == nil {
+				cfg.Logger.Info("created config", "path", path)
+			}
+		}
+	}
+
+	// Resolve alias.
+	urls := ResolveAlias(arg, aliases)
+	if urls == nil {
+		names := SortedAliasNames(aliases)
+		return fmt.Errorf("unknown herd %q — not a URL and no matching alias.\n\nAvailable: %s\nRun 'promptherder list' to see descriptions.", arg, strings.Join(names, ", "))
+	}
+
+	// Pull each URL in the alias.
+	var errs []error
+	for _, u := range urls {
+		if pullErr := Pull(ctx, u, cfg); pullErr != nil {
+			errs = append(errs, pullErr)
+			cfg.Logger.Error("pull failed", "url", u, "error", pullErr)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("pull %q: %d of %d herds failed", arg, len(errs), len(urls))
+	}
+	return nil
+}
+
+
 // PullConfig holds the configuration for a pull operation.
 type PullConfig struct {
 	RepoPath string       // absolute path to the repo root

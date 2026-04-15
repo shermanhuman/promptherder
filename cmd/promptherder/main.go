@@ -51,7 +51,8 @@ func main() {
 Usage:
   promptherder [flags]              Sync all targets
   promptherder <target> [flags]     Sync a single target (copilot, antigravity)
-  promptherder pull <git-url>       Install a herd from a Git repository
+  promptherder pull <name|git-url>  Install a herd (by alias or URL)
+  promptherder list                 Show available herd aliases
 
 Flags:
   -dry-run     Show actions without writing files
@@ -71,7 +72,9 @@ Settings (.promptherder/settings.json):
 
 Examples:
   promptherder                                Sync all targets
+  promptherder pull compound-v                Pull by alias
   promptherder pull https://github.com/user/herd
+  promptherder list                           Show available herds
   promptherder copilot -dry-run               Preview copilot sync
   promptherder antigravity                    Sync antigravity only
 `)
@@ -140,11 +143,39 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Usage: promptherder pull <git-url>\n")
 			os.Exit(2)
 		}
-		runErr = app.Pull(ctx, gitURL, app.PullConfig{
+		runErr = app.ResolveAndPull(ctx, gitURL, app.PullConfig{
 			RepoPath: cwd,
 			DryRun:   dryRun,
 			Logger:   logger,
 		})
+	case "list":
+		aliases, source, aliasErr := app.LoadAliases()
+		if aliasErr != nil {
+			logger.Error("failed to load aliases", "error", aliasErr)
+			os.Exit(1)
+		}
+
+		// Auto-scaffold config on first list.
+		if source == "default" {
+			if path, pathErr := app.AliasesConfigPath(); pathErr == nil {
+				if writeErr := app.WriteDefaultAliases(path); writeErr == nil {
+					fmt.Fprintf(os.Stderr, "Created %s\n\n", path)
+				}
+			}
+		}
+
+		fmt.Println("\nAvailable herds:")
+		fmt.Println()
+		names := app.SortedAliasNames(aliases)
+		for _, name := range names {
+			a := aliases[name]
+			fmt.Printf("  %-14s %s\n", name, a.Description)
+		}
+		fmt.Println()
+		if path, err := app.AliasesConfigPath(); err == nil {
+			fmt.Printf("Config: %s\n", path)
+		}
+		fmt.Println("Pull:   promptherder pull <name>")
 	default:
 		logger.Error("unknown subcommand", "subcommand", subcommand)
 		fmt.Fprintf(os.Stderr, "Usage: promptherder [copilot|antigravity|pull] [flags]\n")
@@ -168,6 +199,7 @@ func extractSubcommand(args []string) (string, []string) {
 		"copilot":     true,
 		"antigravity": true,
 		"pull":        true,
+		"list":        true,
 	}
 	if len(args) > 0 && known[args[0]] {
 		return args[0], args[1:]

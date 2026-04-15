@@ -25,8 +25,11 @@ go install github.com/shermanhuman/promptherder/cmd/promptherder@latest
 ## Quick Start
 
 ```bash
-# Get Compound V (an AI coding methodology) and sync to all your agents
-promptherder pull https://github.com/shermanhuman/compound-v
+# See what herds are available
+promptherder list
+
+# Pull Compound V (an AI coding methodology) and sync
+promptherder pull compound-v
 promptherder
 ```
 
@@ -54,23 +57,60 @@ promptherder
 | Command | What it does |
 |---|---|
 | `promptherder` | Sync to all targets |
+| `promptherder list` | Show available herd aliases |
+| `promptherder pull <name>` | Pull a herd by alias |
+| `promptherder pull <url>` | Pull a herd by URL |
 | `promptherder copilot` | Sync to `.github/` only |
 | `promptherder antigravity` | Sync to `.agent/` only |
-| `promptherder pull <url>` | Pull a herd from GitHub |
 | `promptherder --dry-run` | Show what would be written |
 
 ## Herds
 
 A **herd** is a shareable package of AI coding instructions — rules, skills, and workflows bundled together. [Compound V](https://github.com/shermanhuman/compound-v) is a herd. You can make your own.
 
-Pull any herd from GitHub:
+Pull any herd from GitHub — by name or URL:
 
 ```bash
-promptherder pull https://github.com/someone/their-cool-herd
+promptherder pull compound-v
+promptherder pull oh
 promptherder
 ```
 
 The herd's rules, skills, and workflows get merged into your `.promptherder/agent/` source and synced to all targets on the next run.
+
+## Aliases
+
+promptherder ships with built-in aliases so you can pull herds by short name:
+
+```
+$ promptherder list
+
+Available herds:
+
+  compound-v     Agent methodology — planning, execution, review
+  cv             Shortcut for compound-v
+  grugg          Token reduction prompt — ~75% fewer output tokens
+  oh             Elixir/Go environment skills — starting template, customize for your stack
+
+Config: ~/.config/promptherder/aliases.json
+Pull:   promptherder pull <name>
+```
+
+The first time you run `list` or pull by name, promptherder creates `~/.config/promptherder/aliases.json` with the defaults. Edit it to add your own:
+
+```json
+{
+  "my-stack": {
+    "urls": [
+      "https://github.com/shermanhuman/compound-v",
+      "https://github.com/shermanhuman/oh"
+    ],
+    "description": "My full development stack"
+  }
+}
+```
+
+Full URLs still work: `promptherder pull https://github.com/someone/their-herd`
 
 ## Source Format
 
