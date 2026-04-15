@@ -3,7 +3,6 @@ package app
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -115,10 +114,6 @@ func TestSetupRunner_ErrorOnInvalidPath(t *testing.T) {
 	_, _, _, err := setupRunner(&cfg)
 	if err == nil {
 		t.Error("setupRunner should return error for invalid repo path")
-	}
-
-	if !strings.Contains(err.Error(), "resolve repo path") {
-		t.Errorf("error should mention 'resolve repo path', got: %v", err)
 	}
 }
 

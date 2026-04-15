@@ -140,7 +140,7 @@ Examples:
 		}
 		if gitURL == "" {
 			logger.Error("missing URL argument")
-			fmt.Fprintf(os.Stderr, "Usage: promptherder pull <git-url>\n")
+			fmt.Fprintf(os.Stderr, "Usage: promptherder pull <name|git-url>\n")
 			os.Exit(2)
 		}
 		runErr = app.ResolveAndPull(ctx, gitURL, app.PullConfig{
@@ -156,12 +156,8 @@ Examples:
 		}
 
 		// Auto-scaffold config on first list.
-		if source == "default" {
-			if path, pathErr := app.AliasesConfigPath(); pathErr == nil {
-				if writeErr := app.WriteDefaultAliases(path); writeErr == nil {
-					fmt.Fprintf(os.Stderr, "Created %s\n\n", path)
-				}
-			}
+		if path := app.EnsureAliasesConfig(source, nil); path != "" {
+			fmt.Fprintf(os.Stderr, "Created %s\n\n", path)
 		}
 
 		fmt.Println("\nAvailable herds:")

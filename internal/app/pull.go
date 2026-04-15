@@ -30,13 +30,7 @@ func ResolveAndPull(ctx context.Context, arg string, cfg PullConfig) error {
 	}
 
 	// Auto-scaffold config file on first alias use.
-	if source == "default" {
-		if path, pathErr := AliasesConfigPath(); pathErr == nil {
-			if writeErr := WriteDefaultAliases(path); writeErr == nil {
-				cfg.Logger.Info("created config", "path", path)
-			}
-		}
-	}
+	EnsureAliasesConfig(source, cfg.Logger.Info)
 
 	// Resolve alias.
 	urls := ResolveAlias(arg, aliases)
@@ -59,7 +53,6 @@ func ResolveAndPull(ctx context.Context, arg string, cfg PullConfig) error {
 	}
 	return nil
 }
-
 
 // PullConfig holds the configuration for a pull operation.
 type PullConfig struct {

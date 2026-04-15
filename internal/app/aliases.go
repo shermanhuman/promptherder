@@ -74,8 +74,13 @@ func LoadAliases() (AliasConfig, string, error) {
 }
 
 // WriteDefaultAliases writes the embedded default aliases to disk.
-// Creates parent directories as needed.
+// Creates parent directories as needed. Does not overwrite an existing file.
 func WriteDefaultAliases(path string) error {
+	// Don't overwrite user's existing config.
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
@@ -95,9 +100,9 @@ func WriteDefaultAliases(path string) error {
 }
 
 // ResolveAlias looks up a short name in the alias config.
-// Returns the URLs if found, nil if not found.
+// Returns the URLs if found and non-empty, nil if not found or empty.
 func ResolveAlias(name string, aliases AliasConfig) []string {
-	if alias, ok := aliases[name]; ok {
+	if alias, ok := aliases[name]; ok && len(alias.URLs) > 0 {
 		return alias.URLs
 	}
 	return nil
@@ -116,4 +121,23 @@ func SortedAliasNames(aliases AliasConfig) []string {
 // isURL returns true if the argument looks like a URL rather than a short name.
 func isURL(arg string) bool {
 	return strings.Contains(arg, "://") || strings.HasPrefix(arg, "git@")
+}
+
+// EnsureAliasesConfig writes the default aliases to disk if no config file exists.
+// Returns the path written, or empty string if skipped.
+func EnsureAliasesConfig(source string, log func(string, ...any)) string {
+	if source != "default" {
+		return ""
+	}
+	path, err := AliasesConfigPath()
+	if err != nil {
+		return ""
+	}
+	if err := WriteDefaultAliases(path); err != nil {
+		return ""
+	}
+	if log != nil {
+		log("created config", "path", path)
+	}
+	return path
 }

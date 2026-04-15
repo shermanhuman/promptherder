@@ -115,6 +115,22 @@ func TestResolveAlias_NotFound(t *testing.T) {
 	}
 }
 
+func TestResolveAlias_EmptyURLs(t *testing.T) {
+	t.Parallel()
+
+	aliases := AliasConfig{
+		"empty": {
+			URLs:        []string{},
+			Description: "Has no URLs",
+		},
+	}
+
+	urls := ResolveAlias("empty", aliases)
+	if urls != nil {
+		t.Errorf("expected nil for alias with empty URLs, got %v", urls)
+	}
+}
+
 func TestResolveAlias_MultipleURLs(t *testing.T) {
 	t.Parallel()
 
