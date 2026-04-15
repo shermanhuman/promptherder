@@ -28,9 +28,6 @@ func TestLoadAliases_MissingFile_ReturnsDefaults(t *testing.T) {
 	if _, ok := aliases["compound-v"]; !ok {
 		t.Error("expected 'compound-v' in default aliases")
 	}
-	if _, ok := aliases["cv"]; !ok {
-		t.Error("expected 'cv' shortcut in default aliases")
-	}
 }
 
 func TestLoadAliases_UserFile_Overrides(t *testing.T) {

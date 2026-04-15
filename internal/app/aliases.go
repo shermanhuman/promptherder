@@ -27,10 +27,6 @@ var defaultAliases = AliasConfig{
 		URLs:        []string{"https://github.com/shermanhuman/compound-v"},
 		Description: "Agent methodology — planning, execution, review",
 	},
-	"cv": {
-		URLs:        []string{"https://github.com/shermanhuman/compound-v"},
-		Description: "Shortcut for compound-v",
-	},
 	"grugg": {
 		URLs:        []string{"https://github.com/shermanhuman/grugg"},
 		Description: "Token reduction prompt — ~75% fewer output tokens",

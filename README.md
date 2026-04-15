@@ -88,7 +88,6 @@ $ promptherder list
 Available herds:
 
   compound-v     Agent methodology — planning, execution, review
-  cv             Shortcut for compound-v
   grugg          Token reduction prompt — ~75% fewer output tokens
   oh             Elixir/Go environment skills — starting template, customize for your stack
 
