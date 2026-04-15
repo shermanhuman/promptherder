@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 )
 
@@ -33,6 +35,18 @@ func (t SimpleConcatTarget) Install(ctx context.Context, cfg TargetConfig) ([]st
 
 	targetPath := filepath.Join(cfg.RepoPath, filepath.FromSlash(t.OutputPath))
 	targetRel := filepath.ToSlash(t.OutputPath)
+
+	// Guard: don't overwrite an existing file that wasn't created by us.
+	if !cfg.DryRun {
+		if existing, err := os.ReadFile(targetPath); err == nil {
+			if !bytes.Contains(existing, []byte(promptherderHeader)) {
+				cfg.Logger.Warn("skipping — file exists and was not created by promptherder",
+					"target", targetRel,
+					"hint", "delete the file or add the promptherder header to allow overwriting")
+				return nil, nil
+			}
+		}
+	}
 
 	if cfg.DryRun {
 		cfg.Logger.Info("dry-run", "target", targetRel, "sources", names)
