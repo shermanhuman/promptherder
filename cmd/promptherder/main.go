@@ -49,10 +49,22 @@ func main() {
 		fmt.Fprint(os.Stderr, `promptherder — sync agent configuration across AI coding tools
 
 Usage:
-  promptherder [flags]              Sync all targets
-  promptherder <target> [flags]     Sync a single target (copilot, antigravity)
+  promptherder [flags]              Sync all enabled targets
+  promptherder <target> [flags]     Sync a single target
   promptherder pull <name|git-url>  Install a herd (by alias or URL)
   promptherder list                 Show available herd aliases
+  promptherder agent list           Show available/enabled targets
+  promptherder agent add <name>     Enable a target
+  promptherder agent remove <name>  Disable a target
+
+Targets:
+  copilot       .github/copilot-instructions.md + .github/prompts/
+  antigravity   .agent/ (Gemini CLI)
+  claude        CLAUDE.md (Claude Code)
+  codex         AGENTS.md (OpenAI Codex)
+  cursor        .cursor/rules/promptherder.md
+  windsurf      .windsurf/rules/promptherder.md
+  cline         .clinerules/promptherder.md
 
 Flags:
   -dry-run     Show actions without writing files
@@ -60,23 +72,12 @@ Flags:
   -v           Verbose logging (structured output to stderr)
   -version     Print version and exit
 
-Settings (.promptherder/settings.json):
-  command_prefix           Prefix for command filenames, e.g. "v-" (default: "")
-  command_prefix_enabled   Enable the prefix (default: false)
-
-  Example:
-    {
-      "command_prefix": "v-",
-      "command_prefix_enabled": true
-    }
-
 Examples:
-  promptherder                                Sync all targets
+  promptherder                                Sync all enabled targets
+  promptherder agent add claude cursor        Enable claude and cursor
+  promptherder agent remove copilot           Disable copilot
   promptherder pull compound-v                Pull by alias
-  promptherder pull https://github.com/user/herd
-  promptherder list                           Show available herds
   promptherder copilot -dry-run               Preview copilot sync
-  promptherder antigravity                    Sync antigravity only
 `)
 	}
 
@@ -118,21 +119,39 @@ Examples:
 		Logger:   logger,
 	}
 
-	// Build the targets registry.
-	copilot := app.CopilotTarget{Include: cfg.Include}
-	antigravity := app.AntigravityTarget{}
+	// Build the full targets registry.
+	targetRegistry := map[string]app.Target{
+		"copilot":     app.CopilotTarget{Include: cfg.Include},
+		"antigravity": app.AntigravityTarget{},
+		"claude":      app.NewClaudeTarget(cfg.Include),
+		"codex":       app.NewCodexTarget(cfg.Include),
+		"cursor":      app.NewCursorTarget(cfg.Include),
+		"windsurf":    app.NewWindsurfTarget(cfg.Include),
+		"cline":       app.NewClineTarget(cfg.Include),
+	}
 
-	allTargets := []app.Target{copilot, antigravity}
+	// Load settings for agent filtering.
+	settings, settingsErr := app.LoadSettings(cwd)
+	if settingsErr != nil {
+		logger.Warn("failed to load settings, using defaults", "error", settingsErr)
+		settings = app.DefaultSettings()
+	}
 
 	var runErr error
 	switch subcommand {
 	case "":
-		// Bare promptherder — discover herds, merge, then fan out to targets.
-		runErr = app.RunAll(ctx, allTargets, cfg)
-	case "copilot":
-		runErr = app.RunTarget(ctx, copilot, cfg)
-	case "antigravity":
-		runErr = app.RunTarget(ctx, antigravity, cfg)
+		// Bare promptherder — discover herds, merge, then fan out to enabled targets.
+		var enabled []app.Target
+		for _, name := range settings.EnabledAgents() {
+			if t, ok := targetRegistry[name]; ok {
+				enabled = append(enabled, t)
+			}
+		}
+		runErr = app.RunAll(ctx, enabled, cfg)
+
+	case "copilot", "antigravity", "claude", "codex", "cursor", "windsurf", "cline":
+		runErr = app.RunTarget(ctx, targetRegistry[subcommand], cfg)
+
 	case "pull":
 		var gitURL string
 		if len(allPositional) > 0 {
@@ -148,6 +167,7 @@ Examples:
 			DryRun:   dryRun,
 			Logger:   logger,
 		})
+
 	case "list":
 		aliases, source, aliasErr := app.LoadAliases()
 		if aliasErr != nil {
@@ -172,9 +192,109 @@ Examples:
 			fmt.Printf("Config: %s\n", path)
 		}
 		fmt.Println("Pull:   promptherder pull <name>")
+
+	case "agent":
+		if len(allPositional) == 0 {
+			fmt.Fprintf(os.Stderr, "Usage: promptherder agent <list|add|remove> [name...]\n")
+			os.Exit(2)
+		}
+		agentCmd := allPositional[0]
+		agentArgs := allPositional[1:]
+
+		switch agentCmd {
+		case "list":
+			fmt.Println("\nAvailable targets:")
+			fmt.Println()
+			enabled := settings.EnabledAgents()
+			enabledSet := make(map[string]bool, len(enabled))
+			for _, a := range enabled {
+				enabledSet[a] = true
+			}
+			for _, name := range app.AllAgents {
+				t := targetRegistry[name]
+				check := " "
+				suffix := ""
+				if enabledSet[name] {
+					check = "✓"
+					suffix = " (enabled)"
+				}
+				_ = t // target exists in registry
+				fmt.Printf("  %s %-14s%s\n", check, name, suffix)
+			}
+			fmt.Println()
+			fmt.Println("Enable:  promptherder agent add <name>")
+			fmt.Println("Disable: promptherder agent remove <name>")
+
+		case "add":
+			if len(agentArgs) == 0 {
+				fmt.Fprintf(os.Stderr, "Usage: promptherder agent add <name> [name...]\n")
+				os.Exit(2)
+			}
+			// Validate all names first.
+			for _, name := range agentArgs {
+				if !app.IsValidAgent(name) {
+					fmt.Fprintf(os.Stderr, "Unknown agent: %s\nAvailable: %s\n", name, strings.Join(app.AllAgents, ", "))
+					os.Exit(2)
+				}
+			}
+			// Start from current enabled list.
+			current := settings.EnabledAgents()
+			have := make(map[string]bool, len(current))
+			for _, a := range current {
+				have[a] = true
+			}
+			for _, name := range agentArgs {
+				if !have[name] {
+					current = append(current, name)
+					have[name] = true
+					fmt.Printf("  ✓ added %s\n", name)
+				} else {
+					fmt.Printf("  · %s already enabled\n", name)
+				}
+			}
+			settings.Agents = current
+			if err := app.SaveSettings(cwd, settings); err != nil {
+				logger.Error("failed to save settings", "error", err)
+				os.Exit(1)
+			}
+			fmt.Println("\nRun 'promptherder' to sync.")
+
+		case "remove":
+			if len(agentArgs) == 0 {
+				fmt.Fprintf(os.Stderr, "Usage: promptherder agent remove <name> [name...]\n")
+				os.Exit(2)
+			}
+			removeSet := make(map[string]bool, len(agentArgs))
+			for _, name := range agentArgs {
+				if !app.IsValidAgent(name) {
+					fmt.Fprintf(os.Stderr, "Unknown agent: %s\nAvailable: %s\n", name, strings.Join(app.AllAgents, ", "))
+					os.Exit(2)
+				}
+				removeSet[name] = true
+			}
+			var remaining []string
+			for _, a := range settings.EnabledAgents() {
+				if !removeSet[a] {
+					remaining = append(remaining, a)
+				} else {
+					fmt.Printf("  ✓ removed %s\n", a)
+				}
+			}
+			settings.Agents = remaining
+			if err := app.SaveSettings(cwd, settings); err != nil {
+				logger.Error("failed to save settings", "error", err)
+				os.Exit(1)
+			}
+			fmt.Println("\nRun 'promptherder' to sync.")
+
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown agent command: %s\nUsage: promptherder agent <list|add|remove> [name...]\n", agentCmd)
+			os.Exit(2)
+		}
+
 	default:
 		logger.Error("unknown subcommand", "subcommand", subcommand)
-		fmt.Fprintf(os.Stderr, "Usage: promptherder [copilot|antigravity|pull] [flags]\n")
+		fmt.Fprintf(os.Stderr, "Usage: promptherder [<target>|pull|list|agent] [flags]\n")
 		os.Exit(2)
 	}
 
@@ -194,8 +314,14 @@ func extractSubcommand(args []string) (string, []string) {
 	known := map[string]bool{
 		"copilot":     true,
 		"antigravity": true,
+		"claude":      true,
+		"codex":       true,
+		"cursor":      true,
+		"windsurf":    true,
+		"cline":       true,
 		"pull":        true,
 		"list":        true,
+		"agent":       true,
 	}
 	if len(args) > 0 && known[args[0]] {
 		return args[0], args[1:]

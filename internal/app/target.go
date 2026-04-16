@@ -34,4 +34,9 @@ type TargetConfig struct {
 var SkillVariantFiles = map[string]string{
 	"ANTIGRAVITY.md": "antigravity",
 	"COPILOT.md":     "copilot",
+	"CLAUDE.md":      "claude",
+	"CODEX.md":       "codex",
+	"CURSOR.md":      "cursor",
+	"WINDSURF.md":    "windsurf",
+	"CLINE.md":       "cline",
 }

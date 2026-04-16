@@ -59,12 +59,6 @@ func (m *manifest) setTarget(name string, files []string) {
 	m.Targets[name] = files
 }
 
-// hasTarget returns true if the manifest has records for the given target.
-func (m manifest) hasTarget(name string) bool {
-	_, ok := m.Targets[name]
-	return ok
-}
-
 // isGenerated returns true if the given filename (base name, no path) is in
 // the Generated list and should not be overwritten.
 func (m manifest) isGenerated(name string) bool {
