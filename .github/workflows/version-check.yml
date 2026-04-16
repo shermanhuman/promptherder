@@ -8,6 +8,8 @@ jobs:
   check-version:
     name: Version Bump Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -15,25 +17,44 @@ jobs:
 
       - name: Check version was bumped
         run: |
-          DEFAULT_BRANCH="${{ github.event.pull_request.base.ref }}"
-          git fetch origin "$DEFAULT_BRANCH"
+          set -euo pipefail
 
-          PR_VERSION=$(cat VERSION 2>/dev/null || echo "")
-          MAIN_VERSION=$(git show "origin/$DEFAULT_BRANCH:VERSION" 2>/dev/null || echo "")
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "$BASE_REF"
+
+          PR_VERSION=$(tr -d '[:space:]' < VERSION 2>/dev/null || true)
+          MAIN_VERSION=$(git show "origin/$BASE_REF:VERSION" 2>/dev/null | tr -d '[:space:]' || true)
 
           if [ -z "$PR_VERSION" ]; then
-            echo "::error::VERSION file not found. Create a VERSION file with a semver string (e.g. 0.1.0)."
+            echo "::error::VERSION file not found or empty. Create a VERSION file with a semver string (e.g. 0.1.0)."
             exit 1
           fi
 
           echo "PR version:   $PR_VERSION"
-          echo "Main version: $MAIN_VERSION"
+          echo "Base version: $MAIN_VERSION"
+
+          if [ -z "$MAIN_VERSION" ]; then
+            echo "✓ No version on base branch — first version: $PR_VERSION"
+            exit 0
+          fi
 
           if [ "$PR_VERSION" = "$MAIN_VERSION" ]; then
             echo ""
             echo "::error::Version has not been bumped. Update the VERSION file before merging."
+            echo "Current version on $BASE_REF: $MAIN_VERSION"
+            echo "Bump minor for features, patch for fixes."
+            exit 1
+          fi
+
+          # Enforce version is greater, not just different (no downgrades).
+          IFS='.' read -r PR_MAJOR PR_MINOR PR_PATCH <<< "$PR_VERSION"
+          IFS='.' read -r MAIN_MAJOR MAIN_MINOR MAIN_PATCH <<< "$MAIN_VERSION"
+
+          if (( PR_MAJOR < MAIN_MAJOR )) || \
+             (( PR_MAJOR == MAIN_MAJOR && PR_MINOR < MAIN_MINOR )) || \
+             (( PR_MAJOR == MAIN_MAJOR && PR_MINOR == MAIN_MINOR && PR_PATCH <= MAIN_PATCH )); then
             echo ""
-            echo "Current version on $DEFAULT_BRANCH: $MAIN_VERSION"
+            echo "::error::Version must be greater than base. Got $PR_VERSION, base has $MAIN_VERSION."
             echo "Bump minor for features, patch for fixes."
             exit 1
           fi
