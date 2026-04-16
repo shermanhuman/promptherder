@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generated_at": "2026-02-09T21:48:46Z",
+  "generated_at": "2026-04-16T00:06:37Z",
   "targets": {
     "antigravity": [
       ".agent/rules/browser.md",
@@ -9,7 +9,6 @@
       ".agent/skills/README.md",
       ".agent/skills/compound-v-debug/SKILL.md",
       ".agent/skills/compound-v-parallel/SKILL.md",
-      ".agent/skills/compound-v-persist/SKILL.md",
       ".agent/skills/compound-v-plan/SKILL.md",
       ".agent/skills/compound-v-review/SKILL.md",
       ".agent/skills/compound-v-tdd/SKILL.md",
@@ -24,7 +23,6 @@
       ".github/copilot-instructions.md",
       ".github/prompts/compound-v-debug.prompt.md",
       ".github/prompts/compound-v-parallel.prompt.md",
-      ".github/prompts/compound-v-persist.prompt.md",
       ".github/prompts/compound-v-plan.prompt.md",
       ".github/prompts/compound-v-review.prompt.md",
       ".github/prompts/compound-v-tdd.prompt.md",
@@ -42,7 +40,6 @@
       ".promptherder/agent/skills/compound-v-debug/SKILL.md",
       ".promptherder/agent/skills/compound-v-parallel/ANTIGRAVITY.md",
       ".promptherder/agent/skills/compound-v-parallel/SKILL.md",
-      ".promptherder/agent/skills/compound-v-persist/SKILL.md",
       ".promptherder/agent/skills/compound-v-plan/SKILL.md",
       ".promptherder/agent/skills/compound-v-review/SKILL.md",
       ".promptherder/agent/skills/compound-v-tdd/SKILL.md",

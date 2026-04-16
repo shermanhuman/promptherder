@@ -8,18 +8,45 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"syscall"
 
 	"github.com/shermanhuman/promptherder/internal/app"
 )
 
-// Set via ldflags at build time.
+// Set via ldflags at build time (goreleaser).
+// Falls back to Go module info for `go install`.
 var (
-	Version   = "dev"
-	Commit    = "unknown"
-	BuildDate = "unknown"
+	Version   = ""
+	Commit    = ""
+	BuildDate = ""
 )
+
+func init() {
+	if Version != "" {
+		return
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		Version = "dev"
+		return
+	}
+	Version = info.Main.Version
+	if Version == "" || Version == "(devel)" {
+		Version = "dev"
+	}
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if len(s.Value) >= 7 {
+				Commit = s.Value[:7]
+			}
+		case "vcs.time":
+			BuildDate = s.Value
+		}
+	}
+}
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -87,7 +114,11 @@ Examples:
 	allPositional := append(fs.Args(), positionalArgs...)
 
 	if showVersion {
-		fmt.Printf("promptherder %s (commit: %s, built: %s)\n", Version, Commit, BuildDate)
+		if Commit != "" {
+			fmt.Printf("promptherder %s (commit: %s, built: %s)\n", Version, Commit, BuildDate)
+		} else {
+			fmt.Printf("promptherder %s\n", Version)
+		}
 		return
 	}
 
