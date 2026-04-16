@@ -1,0 +1,41 @@
+name: Version Bump Check
+
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  check-version:
+    name: Version Bump Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version was bumped
+        run: |
+          DEFAULT_BRANCH="${{ github.event.pull_request.base.ref }}"
+          git fetch origin "$DEFAULT_BRANCH"
+
+          PR_VERSION=$(cat VERSION 2>/dev/null || echo "")
+          MAIN_VERSION=$(git show "origin/$DEFAULT_BRANCH:VERSION" 2>/dev/null || echo "")
+
+          if [ -z "$PR_VERSION" ]; then
+            echo "::error::VERSION file not found. Create a VERSION file with a semver string (e.g. 0.1.0)."
+            exit 1
+          fi
+
+          echo "PR version:   $PR_VERSION"
+          echo "Main version: $MAIN_VERSION"
+
+          if [ "$PR_VERSION" = "$MAIN_VERSION" ]; then
+            echo ""
+            echo "::error::Version has not been bumped. Update the VERSION file before merging."
+            echo ""
+            echo "Current version on $DEFAULT_BRANCH: $MAIN_VERSION"
+            echo "Bump minor for features, patch for fixes."
+            exit 1
+          fi
+
+          echo "✓ Version bumped: $MAIN_VERSION → $PR_VERSION"
