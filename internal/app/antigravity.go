@@ -239,9 +239,9 @@ func maybeMigrateLegacyTarget(cfg TargetConfig) error {
 	return nil
 }
 
-// isInteractive returns true if stdout is connected to a terminal.
+// isInteractive returns true if stdin is connected to a terminal.
 func isInteractive() bool {
-	fi, err := os.Stdout.Stat()
+	fi, err := os.Stdin.Stat()
 	if err != nil {
 		return false
 	}

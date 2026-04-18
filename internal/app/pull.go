@@ -233,15 +233,15 @@ func extractTarGz(r io.Reader, destDir string) error {
 				return fmt.Errorf("create %s: %w", target, err)
 			}
 			n, err := io.Copy(f, io.LimitReader(tr, maxExtractFileSize+1))
+			f.Close()
 			if err != nil {
-				f.Close()
+				_ = os.Remove(target)
 				return fmt.Errorf("write %s: %w", target, err)
 			}
 			if n > maxExtractFileSize {
-				f.Close()
+				_ = os.Remove(target)
 				return fmt.Errorf("file %q exceeds size limit (%d bytes)", hdr.Name, maxExtractFileSize)
 			}
-			f.Close()
 		}
 	}
 
