@@ -122,7 +122,7 @@ func TestMergeHerds_SingleHerd(t *testing.T) {
 	}
 
 	// Verify files exist in .promptherder/agent/.
-	agentRoot := filepath.Join(dir, agentDir)
+	agentRoot := filepath.Join(dir, herdStagingDir)
 	if _, err := os.Stat(filepath.Join(agentRoot, "rules", "foo.md")); err != nil {
 		t.Error("rules/foo.md should be installed")
 	}
@@ -189,7 +189,7 @@ func TestMergeHerds_SkipsHerdJSON(t *testing.T) {
 	}
 
 	// herd.json should NOT be in .promptherder/agent/.
-	agentRoot := filepath.Join(dir, agentDir)
+	agentRoot := filepath.Join(dir, herdStagingDir)
 	if _, err := os.Stat(filepath.Join(agentRoot, "herd.json")); !os.IsNotExist(err) {
 		t.Error("herd.json should not be copied to agent dir")
 	}
@@ -200,7 +200,7 @@ func TestMergeHerds_SkipsGeneratedFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	// Pre-create a generated file in agent dir.
-	agentRoot := filepath.Join(dir, agentDir, "rules")
+	agentRoot := filepath.Join(dir, herdStagingDir, "rules")
 	mustMkdir(t, agentRoot)
 	mustWrite(t, filepath.Join(agentRoot, "stack.md"), "# Existing Stack\n")
 
@@ -263,7 +263,7 @@ func TestMergeHerds_DryRun(t *testing.T) {
 	}
 
 	// File should NOT actually exist.
-	agentRoot := filepath.Join(dir, agentDir)
+	agentRoot := filepath.Join(dir, herdStagingDir)
 	if _, err := os.Stat(filepath.Join(agentRoot, "rules", "rule.md")); !os.IsNotExist(err) {
 		t.Error("dry-run should not write files")
 	}
@@ -298,7 +298,7 @@ func TestCleanAgentDir_RemovesTrackedFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a file in agent dir.
-	agentRoot := filepath.Join(dir, agentDir, "rules")
+	agentRoot := filepath.Join(dir, herdStagingDir, "rules")
 	mustMkdir(t, agentRoot)
 	mustWrite(t, filepath.Join(agentRoot, "old-rule.md"), "# Old\n")
 
@@ -310,7 +310,7 @@ func TestCleanAgentDir_RemovesTrackedFiles(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := cleanAgentDir(dir, prev, false, logger); err != nil {
+	if err := cleanHerdStaging(dir, prev, false, logger); err != nil {
 		t.Fatal(err)
 	}
 
@@ -323,7 +323,7 @@ func TestCleanAgentDir_PreservesGeneratedFiles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	agentRoot := filepath.Join(dir, agentDir, "rules")
+	agentRoot := filepath.Join(dir, herdStagingDir, "rules")
 	mustMkdir(t, agentRoot)
 	mustWrite(t, filepath.Join(agentRoot, "stack.md"), "# Stack\n")
 
@@ -336,7 +336,7 @@ func TestCleanAgentDir_PreservesGeneratedFiles(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := cleanAgentDir(dir, prev, false, logger); err != nil {
+	if err := cleanHerdStaging(dir, prev, false, logger); err != nil {
 		t.Fatal(err)
 	}
 
@@ -375,7 +375,7 @@ func TestMergeHerds_SkipsGitDir(t *testing.T) {
 	}
 
 	// .git files should NOT exist in agent dir.
-	agentRoot := filepath.Join(dir, agentDir)
+	agentRoot := filepath.Join(dir, herdStagingDir)
 	if _, err := os.Stat(filepath.Join(agentRoot, ".git", "HEAD")); !os.IsNotExist(err) {
 		t.Error(".git/HEAD should not be copied to agent dir")
 	}
@@ -416,7 +416,7 @@ func TestMergeHerds_SkipsNonContentDirs(t *testing.T) {
 		t.Fatalf("expected 3 installed files, got %d: %v", len(installed), installed)
 	}
 
-	agentRoot := filepath.Join(dir, agentDir)
+	agentRoot := filepath.Join(dir, herdStagingDir)
 	// Content files should exist.
 	if _, err := os.Stat(filepath.Join(agentRoot, "rules", "rule.md")); err != nil {
 		t.Error("rules/rule.md should be installed")
@@ -441,7 +441,7 @@ func TestCleanAgentDir_RemovesEmptyParentDirs(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a nested file in agent dir.
-	skillDir := filepath.Join(dir, agentDir, "skills", "old-skill")
+	skillDir := filepath.Join(dir, herdStagingDir, "skills", "old-skill")
 	mustMkdir(t, skillDir)
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Old\n")
 
@@ -453,7 +453,7 @@ func TestCleanAgentDir_RemovesEmptyParentDirs(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := cleanAgentDir(dir, prev, false, logger); err != nil {
+	if err := cleanHerdStaging(dir, prev, false, logger); err != nil {
 		t.Fatal(err)
 	}
 

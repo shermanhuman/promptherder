@@ -303,7 +303,7 @@ compound-v/skills/compound-v-parallel/
 
 1. **Herds** are pulled via `promptherder pull <url>` into `.promptherder/herds/<name>/`. The merge step copies all herd content into `.promptherder/agent/skills/<name>/`.
 2. **Antigravity** walks `.promptherder/agent/` and for each skill directory:
-   - If `ANTIGRAVITY.md` exists → installs it as `<name>/SKILL.md` at `.agent/`
+   - If `ANTIGRAVITY.md` exists → installs it as `<name>/SKILL.md` at `.agents/`
    - If `COPILOT.md` exists → skips it (not for this target)
    - If no variant exists → installs generic `SKILL.md`
 3. **Copilot** checks each skill directory for `COPILOT.md` before falling back to `SKILL.md`.
@@ -363,7 +363,7 @@ promptherder (bare)
   → discover herds in .promptherder/herds/*/
   → merge herds → .promptherder/agent/
   → copilot: .promptherder/agent/ → .github/
-  → antigravity: .promptherder/agent/ → .agent/
+  → antigravity: .promptherder/agent/ → .agents/
 ```
 
 ### herd.json

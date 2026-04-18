@@ -74,8 +74,8 @@ func RunAll(ctx context.Context, targets []Target, cfg Config) error {
 		cfg.Logger.Warn("no herds found — run `promptherder pull <url>` to install one")
 	} else {
 		// Clean previous herd files from agent dir before re-merging.
-		if err := cleanAgentDir(repoPath, prevManifest, cfg.DryRun, cfg.Logger); err != nil {
-			return fmt.Errorf("clean agent dir: %w", err)
+		if err := cleanHerdStaging(repoPath, prevManifest, cfg.DryRun, cfg.Logger); err != nil {
+			return fmt.Errorf("clean staging dir: %w", err)
 		}
 
 		herdNames := make([]string, len(herds))

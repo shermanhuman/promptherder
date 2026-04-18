@@ -11,7 +11,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// maxExtractFileSize is the per-file size limit during herd archive extraction.
+const maxExtractFileSize = 10 << 20 // 10 MB
+
+// httpClient is used for all outbound HTTP requests. Unlike http.DefaultClient,
+// it has a timeout to prevent indefinite hangs.
+var httpClient = &http.Client{Timeout: 60 * time.Second}
 
 // ResolveAndPull resolves a pull argument (URL or alias) and pulls herds.
 // If the argument is a URL, it pulls directly.
@@ -103,7 +111,7 @@ func Pull(ctx context.Context, gitURL string, cfg PullConfig) error {
 		return fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", archiveURL, err)
 	}
@@ -220,15 +228,20 @@ func extractTarGz(r io.Reader, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("mkdir parent %s: %w", target, err)
 			}
-			f, err := os.Create(target)
+			f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 			if err != nil {
 				return fmt.Errorf("create %s: %w", target, err)
 			}
-			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
+			n, err := io.Copy(f, io.LimitReader(tr, maxExtractFileSize+1))
+			f.Close()
+			if err != nil {
+				_ = os.Remove(target)
 				return fmt.Errorf("write %s: %w", target, err)
 			}
-			f.Close()
+			if n > maxExtractFileSize {
+				_ = os.Remove(target)
+				return fmt.Errorf("file %q exceeds size limit (%d bytes)", hdr.Name, maxExtractFileSize)
+			}
 		}
 	}
 

@@ -14,7 +14,7 @@ import (
 const (
 	herdsDir      = ".promptherder/herds"
 	herdMetaFile  = "herd.json"
-	agentDir      = ".promptherder/agent"
+	herdStagingDir = ".promptherder/agent"
 	hardRulesFile = ".promptherder/hard-rules.md"
 )
 
@@ -83,10 +83,10 @@ func discoverHerds(repoPath string) ([]herdOnDisk, error) {
 	return herds, nil
 }
 
-// mergeHerds copies all herd content into .promptherder/agent/, erroring on conflict.
-// It respects generated files that already exist and should not be overwritten.
+// mergeHerds copies all herd content into the staging dir (.promptherder/agent/),
+// erroring on conflict. It respects generated files that should not be overwritten.
 func mergeHerds(ctx context.Context, repoPath string, herds []herdOnDisk, m manifest, cfg TargetConfig) ([]string, error) {
-	agentRoot := filepath.Join(repoPath, agentDir)
+	stagingRoot := filepath.Join(repoPath, herdStagingDir)
 
 	// Track which herd owns each relative path, for conflict detection.
 	ownership := make(map[string]string) // relSlash → herd name
@@ -151,7 +151,7 @@ func mergeHerds(ctx context.Context, repoPath string, herds []herdOnDisk, m mani
 			// Skip agent-generated files that already exist.
 			baseName := filepath.Base(rel)
 			if m.isGenerated(baseName) {
-				targetPath := filepath.Join(agentRoot, filepath.FromSlash(relSlash))
+				targetPath := filepath.Join(stagingRoot, filepath.FromSlash(relSlash))
 				if _, err := os.Stat(targetPath); err == nil {
 					cfg.Logger.Debug("skipping generated file", "file", relSlash, "herd", herd.Meta.Name)
 					return nil
@@ -163,8 +163,8 @@ func mergeHerds(ctx context.Context, repoPath string, herds []herdOnDisk, m mani
 				return fmt.Errorf("read %s: %w", path, err)
 			}
 
-			targetPath := filepath.Join(agentRoot, filepath.FromSlash(relSlash))
-			targetRel := filepath.ToSlash(filepath.Join(agentDir, relSlash))
+			targetPath := filepath.Join(stagingRoot, filepath.FromSlash(relSlash))
+			targetRel := filepath.ToSlash(filepath.Join(herdStagingDir, relSlash))
 
 			if cfg.DryRun {
 				cfg.Logger.Info("dry-run", "target", targetRel, "source", relSlash, "herd", herd.Meta.Name)
@@ -188,9 +188,9 @@ func mergeHerds(ctx context.Context, repoPath string, herds []herdOnDisk, m mani
 	return installed, nil
 }
 
-// cleanAgentDir removes all files from .promptherder/agent/ that are tracked
-// in the manifest under the herds target, preparing for a fresh merge.
-func cleanAgentDir(repoPath string, prev manifest, dryRun bool, logger interface{ Info(string, ...any) }) error {
+// cleanHerdStaging removes all files from the staging dir (.promptherder/agent/)
+// that are tracked in the manifest under the herds target, preparing for a fresh merge.
+func cleanHerdStaging(repoPath string, prev manifest, dryRun bool, logger interface{ Info(string, ...any) }) error {
 	herdFiles := prev.Targets["herds"]
 	if len(herdFiles) == 0 {
 		return nil
@@ -198,7 +198,7 @@ func cleanAgentDir(repoPath string, prev manifest, dryRun bool, logger interface
 
 	for _, relSlash := range herdFiles {
 		// Only clean files under .promptherder/agent/
-		if !strings.HasPrefix(relSlash, agentDir+"/") {
+		if !strings.HasPrefix(relSlash, herdStagingDir+"/") {
 			continue
 		}
 		absPath := filepath.Join(repoPath, filepath.FromSlash(relSlash))
@@ -217,10 +217,10 @@ func cleanAgentDir(repoPath string, prev manifest, dryRun bool, logger interface
 			return fmt.Errorf("clean %s: %w", relSlash, err)
 		}
 
-		// Clean empty parent directories up to agentDir.
+		// Clean empty parent directories up to the staging root.
 		parentDir := filepath.Dir(absPath)
-		agentRoot := filepath.Join(repoPath, agentDir)
-		for parentDir != agentRoot && parentDir != "." {
+		stagingRoot := filepath.Join(repoPath, herdStagingDir)
+		for parentDir != stagingRoot && parentDir != "." {
 			entries, err := os.ReadDir(parentDir)
 			if err != nil || len(entries) > 0 {
 				break
