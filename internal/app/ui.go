@@ -14,7 +14,7 @@ import (
 //
 // Output format:
 //
-//	✓ synced .agent/rules/compound-v.md ← rules/compound-v.md (compound-v)
+//	✓ synced .agents/rules/compound-v.md ← rules/compound-v.md (compound-v)
 //	→ installing target: antigravity
 //	⚠ no herds found — run `promptherder pull <url>` to install one
 //	✗ failed to resolve path

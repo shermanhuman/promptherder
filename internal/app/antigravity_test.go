@@ -13,7 +13,7 @@ func TestAntigravityTarget_BasicInstall(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	srcDir := filepath.Join(dir, ".promptherder", "agent")
+	srcDir := filepath.Join(dir, ".promptherder", "agents")
 	rulesDir := filepath.Join(srcDir, "rules")
 	mustMkdir(t, rulesDir)
 	mustWrite(t, filepath.Join(rulesDir, "00-test.md"), "# Test\n")
@@ -38,17 +38,87 @@ func TestAntigravityTarget_BasicInstall(t *testing.T) {
 		t.Fatalf("expected 3 files installed, got %d", len(installed))
 	}
 
-	targetRulesDir := filepath.Join(dir, ".agent", "rules")
+	targetRulesDir := filepath.Join(dir, ".agents", "rules")
 	if _, err := os.Stat(filepath.Join(targetRulesDir, "00-test.md")); err != nil {
-		t.Error("00-test.md should be copied to .agent/rules/")
+		t.Error("00-test.md should be copied to .agents/rules/")
 	}
 	if _, err := os.Stat(filepath.Join(targetRulesDir, "01-shell.md")); err != nil {
-		t.Error("01-shell.md should be copied to .agent/rules/")
+		t.Error("01-shell.md should be copied to .agents/rules/")
 	}
 
-	targetSkillFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	targetSkillFile := filepath.Join(dir, ".agents", "skills", "my-skill", "SKILL.md")
 	if _, err := os.Stat(targetSkillFile); err != nil {
-		t.Error("SKILL.md should be copied to .agent/skills/my-skill/")
+		t.Error("SKILL.md should be copied to .agents/skills/my-skill/")
+	}
+}
+
+func TestAntigravityTarget_LegacySourceFallback(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Only the legacy source exists — should still work.
+	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	mustMkdir(t, srcDir)
+	mustWrite(t, filepath.Join(srcDir, "legacy.md"), "# Legacy\n")
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{
+		RepoPath: dir,
+		Logger:   testLogger(t),
+	}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(installed) != 1 {
+		t.Fatalf("expected 1 file installed from legacy source, got %d", len(installed))
+	}
+
+	targetFile := filepath.Join(dir, ".agents", "rules", "legacy.md")
+	if _, err := os.Stat(targetFile); err != nil {
+		t.Error("legacy source file should be installed to .agents/")
+	}
+}
+
+func TestAntigravityTarget_NewSourceTakesPriorityOverLegacy(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Both sources exist — new should win.
+	newSrcDir := filepath.Join(dir, ".promptherder", "agents", "rules")
+	mustMkdir(t, newSrcDir)
+	mustWrite(t, filepath.Join(newSrcDir, "new.md"), "# New\n")
+
+	legacySrcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	mustMkdir(t, legacySrcDir)
+	mustWrite(t, filepath.Join(legacySrcDir, "legacy.md"), "# Legacy\n")
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{
+		RepoPath: dir,
+		Logger:   testLogger(t),
+	}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Only new.md should be installed — legacy.md from .agent/ must be ignored.
+	if len(installed) != 1 {
+		t.Fatalf("expected 1 file (from new source), got %d: %v", len(installed), installed)
+	}
+
+	newFile := filepath.Join(dir, ".agents", "rules", "new.md")
+	if _, err := os.Stat(newFile); err != nil {
+		t.Error("new.md from .promptherder/agents/ should be installed")
+	}
+
+	legacyFile := filepath.Join(dir, ".agents", "rules", "legacy.md")
+	if _, err := os.Stat(legacyFile); err == nil {
+		t.Error("legacy.md from .promptherder/agent/ should NOT be installed when new source exists")
 	}
 }
 
@@ -56,12 +126,12 @@ func TestAntigravityTarget_SkipsGeneratedFiles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	srcDir := filepath.Join(dir, ".promptherder", "agents", "rules")
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "stack.md"), "# Stack\n")
 	mustWrite(t, filepath.Join(srcDir, "normal.md"), "# Normal\n")
 
-	targetDir := filepath.Join(dir, ".agent", "rules")
+	targetDir := filepath.Join(dir, ".agents", "rules")
 	mustMkdir(t, targetDir)
 	mustWrite(t, filepath.Join(targetDir, "stack.md"), "# Existing Stack\n")
 
@@ -102,7 +172,7 @@ func TestAntigravityTarget_GeneratedFileFirstInstall(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	srcDir := filepath.Join(dir, ".promptherder", "agents", "rules")
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "stack.md"), "# Stack\n")
 
@@ -126,7 +196,7 @@ func TestAntigravityTarget_GeneratedFileFirstInstall(t *testing.T) {
 		t.Fatalf("expected 1 file installed, got %d", len(installed))
 	}
 
-	targetFile := filepath.Join(dir, ".agent", "rules", "stack.md")
+	targetFile := filepath.Join(dir, ".agents", "rules", "stack.md")
 	if _, err := os.Stat(targetFile); err != nil {
 		t.Error("stack.md should be installed on first run even if marked generated")
 	}
@@ -136,7 +206,7 @@ func TestAntigravityTarget_DryRun(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	srcDir := filepath.Join(dir, ".promptherder", "agents", "rules")
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "test.md"), "# Test\n")
 
@@ -156,7 +226,7 @@ func TestAntigravityTarget_DryRun(t *testing.T) {
 		t.Fatalf("dry-run should return files list, got %d", len(installed))
 	}
 
-	targetFile := filepath.Join(dir, ".agent", "rules", "test.md")
+	targetFile := filepath.Join(dir, ".agents", "rules", "test.md")
 	if _, err := os.Stat(targetFile); !os.IsNotExist(err) {
 		t.Error("dry-run should not write files")
 	}
@@ -186,7 +256,7 @@ func TestAntigravityTarget_ContextCancellation(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	srcDir := filepath.Join(dir, ".promptherder", "agents", "rules")
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "test.md"), "# Test\n")
 
@@ -212,7 +282,7 @@ func TestAntigravityTarget_PreservesDirectoryStructure(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	srcDir := filepath.Join(dir, ".promptherder", "agent")
+	srcDir := filepath.Join(dir, ".promptherder", "agents")
 	rulesDir := filepath.Join(srcDir, "rules", "subdir")
 	skillsDir := filepath.Join(srcDir, "skills", "skill-a", "examples")
 	mustMkdir(t, rulesDir)
@@ -236,10 +306,10 @@ func TestAntigravityTarget_PreservesDirectoryStructure(t *testing.T) {
 		t.Fatalf("expected 2 files, got %d", len(installed))
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, ".agent", "rules", "subdir", "nested.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".agents", "rules", "subdir", "nested.md")); err != nil {
 		t.Error("nested directory structure should be preserved")
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".agent", "skills", "skill-a", "examples", "example.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".agents", "skills", "skill-a", "examples", "example.md")); err != nil {
 		t.Error("deep nested structure should be preserved")
 	}
 }
@@ -256,7 +326,7 @@ func TestAntigravityTarget_SkillVariant_PrefersAntigravityMD(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	skillDir := filepath.Join(dir, ".promptherder", "agents", "skills", "my-skill")
 	mustMkdir(t, skillDir)
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Generic Skill\n")
 	mustWrite(t, filepath.Join(skillDir, "ANTIGRAVITY.md"), "# Antigravity-Specific Skill\n")
@@ -270,7 +340,7 @@ func TestAntigravityTarget_SkillVariant_PrefersAntigravityMD(t *testing.T) {
 	}
 
 	// Should install ANTIGRAVITY.md as SKILL.md, not the generic.
-	targetFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	targetFile := filepath.Join(dir, ".agents", "skills", "my-skill", "SKILL.md")
 	data, err := os.ReadFile(targetFile)
 	if err != nil {
 		t.Fatalf("SKILL.md should exist at target: %v", err)
@@ -283,7 +353,7 @@ func TestAntigravityTarget_SkillVariant_PrefersAntigravityMD(t *testing.T) {
 	}
 
 	// ANTIGRAVITY.md should NOT appear at the target.
-	antigravityFile := filepath.Join(dir, ".agent", "skills", "my-skill", "ANTIGRAVITY.md")
+	antigravityFile := filepath.Join(dir, ".agents", "skills", "my-skill", "ANTIGRAVITY.md")
 	if _, err := os.Stat(antigravityFile); !os.IsNotExist(err) {
 		t.Error("ANTIGRAVITY.md should not be copied to target — it's installed as SKILL.md")
 	}
@@ -300,7 +370,7 @@ func TestAntigravityTarget_SkillVariant_SkipsCopilotMD(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	skillDir := filepath.Join(dir, ".promptherder", "agents", "skills", "my-skill")
 	mustMkdir(t, skillDir)
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Generic Skill\n")
 	mustWrite(t, filepath.Join(skillDir, "COPILOT.md"), "# Copilot-Specific Skill\n")
@@ -314,13 +384,13 @@ func TestAntigravityTarget_SkillVariant_SkipsCopilotMD(t *testing.T) {
 	}
 
 	// COPILOT.md should NOT be installed.
-	copilotFile := filepath.Join(dir, ".agent", "skills", "my-skill", "COPILOT.md")
+	copilotFile := filepath.Join(dir, ".agents", "skills", "my-skill", "COPILOT.md")
 	if _, err := os.Stat(copilotFile); !os.IsNotExist(err) {
 		t.Error("COPILOT.md should not be copied to Antigravity target")
 	}
 
 	// Generic SKILL.md should be installed (no ANTIGRAVITY.md variant).
-	targetFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	targetFile := filepath.Join(dir, ".agents", "skills", "my-skill", "SKILL.md")
 	data, err := os.ReadFile(targetFile)
 	if err != nil {
 		t.Fatalf("SKILL.md should exist at target: %v", err)
@@ -341,7 +411,7 @@ func TestAntigravityTarget_SkillVariant_FallsBackToGeneric(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	skillDir := filepath.Join(dir, ".promptherder", "agents", "skills", "my-skill")
 	mustMkdir(t, skillDir)
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Generic Skill\n")
 
@@ -354,7 +424,7 @@ func TestAntigravityTarget_SkillVariant_FallsBackToGeneric(t *testing.T) {
 	}
 
 	// Generic SKILL.md should be installed when no variant exists.
-	targetFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	targetFile := filepath.Join(dir, ".agents", "skills", "my-skill", "SKILL.md")
 	data, err := os.ReadFile(targetFile)
 	if err != nil {
 		t.Fatalf("SKILL.md should exist at target: %v", err)
@@ -372,7 +442,7 @@ func TestAntigravityTarget_SkillVariant_AllThreeFiles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
+	skillDir := filepath.Join(dir, ".promptherder", "agents", "skills", "my-skill")
 	mustMkdir(t, skillDir)
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "# Generic\n")
 	mustWrite(t, filepath.Join(skillDir, "ANTIGRAVITY.md"), "# Antigravity\n")
@@ -387,7 +457,7 @@ func TestAntigravityTarget_SkillVariant_AllThreeFiles(t *testing.T) {
 	}
 
 	// Only ANTIGRAVITY.md content should be installed as SKILL.md.
-	targetFile := filepath.Join(dir, ".agent", "skills", "my-skill", "SKILL.md")
+	targetFile := filepath.Join(dir, ".agents", "skills", "my-skill", "SKILL.md")
 	data, err := os.ReadFile(targetFile)
 	if err != nil {
 		t.Fatal(err)
@@ -433,7 +503,7 @@ func TestAntigravityTarget_HardRules(t *testing.T) {
 	dir := t.TempDir()
 
 	// Set up source agent dir with one rule.
-	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	srcDir := filepath.Join(dir, ".promptherder", "agents", "rules")
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "compound-v.md"), "# Compound V\n")
 
@@ -454,10 +524,10 @@ func TestAntigravityTarget_HardRules(t *testing.T) {
 		t.Fatalf("expected 2 files installed, got %d: %v", len(installed), installed)
 	}
 
-	// Verify hard-rules.md was copied to .agent/rules/hard-rules.md
-	data, err := os.ReadFile(filepath.Join(dir, ".agent", "rules", "hard-rules.md"))
+	// Verify hard-rules.md was copied to .agents/rules/hard-rules.md
+	data, err := os.ReadFile(filepath.Join(dir, ".agents", "rules", "hard-rules.md"))
 	if err != nil {
-		t.Fatal("hard-rules.md should be copied to .agent/rules/")
+		t.Fatal("hard-rules.md should be copied to .agents/rules/")
 	}
 	content := string(data)
 	if !strings.Contains(content, "Never use eval") {
@@ -473,7 +543,7 @@ func TestAntigravityTarget_NoHardRules(t *testing.T) {
 	dir := t.TempDir()
 
 	// Set up source agent dir with one rule, but NO hard-rules.md.
-	srcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	srcDir := filepath.Join(dir, ".promptherder", "agents", "rules")
 	mustMkdir(t, srcDir)
 	mustWrite(t, filepath.Join(srcDir, "compound-v.md"), "# Compound V\n")
 
@@ -491,7 +561,50 @@ func TestAntigravityTarget_NoHardRules(t *testing.T) {
 	}
 
 	// Verify hard-rules.md was NOT created.
-	if _, err := os.Stat(filepath.Join(dir, ".agent", "rules", "hard-rules.md")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, ".agents", "rules", "hard-rules.md")); err == nil {
 		t.Error("hard-rules.md should not exist when source is missing")
+	}
+}
+
+func TestAntigravityTarget_MigrationPrompt_NoLegacy(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// No .agent/ exists — maybeMigrateLegacyTarget should do nothing.
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+	if err := maybeMigrateLegacyTarget(cfg); err != nil {
+		t.Errorf("no-op migration should not error, got: %v", err)
+	}
+}
+
+func TestAntigravityTarget_MigrationPrompt_AlreadyMigrated(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Both .agent/ and .agents/ exist — should not prompt.
+	mustMkdir(t, filepath.Join(dir, ".agent", "rules"))
+	mustMkdir(t, filepath.Join(dir, ".agents", "rules"))
+
+	cfg := TargetConfig{RepoPath: dir, Logger: testLogger(t)}
+	if err := maybeMigrateLegacyTarget(cfg); err != nil {
+		t.Errorf("already-migrated should not error, got: %v", err)
+	}
+}
+
+func TestAntigravityTarget_MigrationPrompt_DryRunSkips(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// .agent/ exists, .agents/ does not — but DryRun=true so no prompt.
+	mustMkdir(t, filepath.Join(dir, ".agent", "rules"))
+
+	cfg := TargetConfig{RepoPath: dir, DryRun: true, Logger: testLogger(t)}
+	if err := maybeMigrateLegacyTarget(cfg); err != nil {
+		t.Errorf("dry-run migration should not error, got: %v", err)
+	}
+
+	// .agents/ should NOT have been created.
+	if _, err := os.Stat(filepath.Join(dir, ".agents")); err == nil {
+		t.Error("dry-run should not create .agents/")
 	}
 }

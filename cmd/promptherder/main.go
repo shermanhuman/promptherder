@@ -86,7 +86,7 @@ Usage:
 
 Targets:
   copilot       .github/copilot-instructions.md + .github/prompts/
-  antigravity   .agent/ (Gemini CLI)
+  antigravity   .agents/ (Gemini CLI)
   claude        CLAUDE.md (Claude Code)
   codex         AGENTS.md (OpenAI Codex)
   cursor        .cursor/rules/promptherder.md
