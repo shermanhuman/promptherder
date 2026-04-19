@@ -731,30 +731,31 @@ func TestRunCopilot_WithWorkflows(t *testing.T) {
 
 // --- skill → prompt conversion ---
 
-func TestBuildCopilotSkillPrompts_Basic(t *testing.T) {
+func TestBuildCopilotAgentSkills_Basic(t *testing.T) {
 	dir := t.TempDir()
 	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "compound-v-tdd")
 	mustMkdir(t, skillDir)
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: compound-v-tdd\ndescription: TDD skill.\n---\n\n# TDD\n\nRed green refactor.\n")
 
-	items, err := buildCopilotSkillPrompts(dir)
+	items, err := buildCopilotAgentSkills(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 1 {
-		t.Fatalf("expected 1 skill prompt, got %d", len(items))
+		t.Fatalf("expected 1 skill, got %d", len(items))
 	}
 
-	assertTarget(t, items[0], filepath.Join(dir, ".github", "prompts", "compound-v-tdd.prompt.md"))
-	assertContains(t, items[0].Content, `mode: "agent"`)
+	assertTarget(t, items[0], filepath.Join(dir, ".github", "skills", "compound-v-tdd", "SKILL.md"))
+	assertContains(t, items[0].Content, "name: compound-v-tdd")
 	assertContains(t, items[0].Content, `description: "TDD skill."`)
 	assertContains(t, items[0].Content, "# TDD")
 	assertContains(t, items[0].Content, "Red green refactor")
+	assertNotContains(t, items[0].Content, `mode: "agent"`)
 }
 
-func TestBuildCopilotSkillPrompts_MissingDir(t *testing.T) {
+func TestBuildCopilotAgentSkills_MissingDir(t *testing.T) {
 	dir := t.TempDir()
-	items, err := buildCopilotSkillPrompts(dir)
+	items, err := buildCopilotAgentSkills(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -763,13 +764,13 @@ func TestBuildCopilotSkillPrompts_MissingDir(t *testing.T) {
 	}
 }
 
-func TestBuildCopilotSkillPrompts_SkipsDirWithoutSKILLmd(t *testing.T) {
+func TestBuildCopilotAgentSkills_SkipsDirWithoutSKILLmd(t *testing.T) {
 	dir := t.TempDir()
 	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "empty-skill")
 	mustMkdir(t, skillDir)
 	mustWrite(t, filepath.Join(skillDir, "README.md"), "# Not a skill\n")
 
-	items, err := buildCopilotSkillPrompts(dir)
+	items, err := buildCopilotAgentSkills(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -796,13 +797,13 @@ func TestRunCopilot_WithSkills(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check prompt file was created.
-	promptFile := filepath.Join(dir, ".github", "prompts", "my-review.prompt.md")
-	data, err := os.ReadFile(promptFile)
+	// Check Agent Skill file was created.
+	skillFile := filepath.Join(dir, ".github", "skills", "my-review", "SKILL.md")
+	data, err := os.ReadFile(skillFile)
 	if err != nil {
-		t.Fatalf("skill prompt file not created: %v", err)
+		t.Fatalf("agent skill file not created: %v", err)
 	}
-	assertContains(t, data, `mode: "agent"`)
+	assertContains(t, data, "name: my-review")
 	assertContains(t, data, "# Review")
 
 	// Check manifest.
@@ -810,17 +811,17 @@ func TestRunCopilot_WithSkills(t *testing.T) {
 	copilotFiles := m.Targets["copilot"]
 	found := false
 	for _, f := range copilotFiles {
-		if f == ".github/prompts/my-review.prompt.md" {
+		if f == ".github/skills/my-review/SKILL.md" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("manifest should include skill prompt file, got: %v", copilotFiles)
+		t.Errorf("manifest should include agent skill file, got: %v", copilotFiles)
 	}
 }
 
-func TestBuildCopilotSkillPrompts_PrefersCopilotVariant(t *testing.T) {
+func TestBuildCopilotAgentSkills_PrefersCopilotVariant(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
@@ -828,12 +829,12 @@ func TestBuildCopilotSkillPrompts_PrefersCopilotVariant(t *testing.T) {
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: my-skill\ndescription: Generic skill.\n---\n\n# Generic\n\nGeneric content.\n")
 	mustWrite(t, filepath.Join(skillDir, "COPILOT.md"), "---\nname: my-skill\ndescription: Copilot skill.\n---\n\n# Copilot\n\nCopilot-specific content.\n")
 
-	items, err := buildCopilotSkillPrompts(dir)
+	items, err := buildCopilotAgentSkills(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 1 {
-		t.Fatalf("expected 1 skill prompt, got %d", len(items))
+		t.Fatalf("expected 1 skill, got %d", len(items))
 	}
 
 	// Should use COPILOT.md content, not SKILL.md.
@@ -843,21 +844,23 @@ func TestBuildCopilotSkillPrompts_PrefersCopilotVariant(t *testing.T) {
 
 	// Source label should reference COPILOT.md.
 	assertContains(t, items[0].Content, "my-skill/COPILOT.md")
+	// Target should be Agent Skills path.
+	assertTarget(t, items[0], filepath.Join(dir, ".github", "skills", "my-skill", "SKILL.md"))
 }
 
-func TestBuildCopilotSkillPrompts_FallsBackToGeneric(t *testing.T) {
+func TestBuildCopilotAgentSkills_FallsBackToGeneric(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
 	mustMkdir(t, skillDir)
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: my-skill\ndescription: Generic skill.\n---\n\n# Generic\n\nGeneric content.\n")
 
-	items, err := buildCopilotSkillPrompts(dir)
+	items, err := buildCopilotAgentSkills(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 1 {
-		t.Fatalf("expected 1 skill prompt, got %d", len(items))
+		t.Fatalf("expected 1 skill, got %d", len(items))
 	}
 
 	// Should use SKILL.md when no COPILOT.md exists.
@@ -865,7 +868,7 @@ func TestBuildCopilotSkillPrompts_FallsBackToGeneric(t *testing.T) {
 	assertContains(t, items[0].Content, "my-skill/SKILL.md")
 }
 
-func TestBuildCopilotSkillPrompts_IgnoresAntigravityVariant(t *testing.T) {
+func TestBuildCopilotAgentSkills_IgnoresAntigravityVariant(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-skill")
@@ -873,17 +876,59 @@ func TestBuildCopilotSkillPrompts_IgnoresAntigravityVariant(t *testing.T) {
 	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: my-skill\ndescription: Generic.\n---\n\n# Generic\n")
 	mustWrite(t, filepath.Join(skillDir, "ANTIGRAVITY.md"), "---\nname: my-skill\ndescription: Antigravity.\n---\n\n# Antigravity\n")
 
-	items, err := buildCopilotSkillPrompts(dir)
+	items, err := buildCopilotAgentSkills(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 1 {
-		t.Fatalf("expected 1 skill prompt, got %d", len(items))
+		t.Fatalf("expected 1 skill, got %d", len(items))
 	}
 
 	// Should use generic SKILL.md, not ANTIGRAVITY.md (that's for Antigravity target).
 	assertContains(t, items[0].Content, "# Generic")
 	assertNotContains(t, items[0].Content, "# Antigravity")
+}
+
+func TestBuildCopilotAgentSkills_InternalSkillNotUserInvocable(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "compound-v-persist")
+	mustMkdir(t, skillDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: compound-v-persist\ndescription: Persist skill.\n---\n\n# Persist\n")
+
+	items, err := buildCopilotAgentSkills(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(items))
+	}
+
+	assertContains(t, items[0].Content, "user-invocable: false")
+}
+
+func TestBuildCopilotAgentSkills_ResourcesCopied(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, ".promptherder", "agent", "skills", "my-compress")
+	scriptsDir := filepath.Join(skillDir, "scripts")
+	mustMkdir(t, scriptsDir)
+	mustWrite(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: my-compress\ndescription: Compress.\n---\n\n# Compress\n")
+	mustWrite(t, filepath.Join(scriptsDir, "run.py"), "print('hello')\n")
+
+	items, err := buildCopilotAgentSkills(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items (skill + resource), got %d", len(items))
+	}
+
+	// First item is the SKILL.md.
+	assertTarget(t, items[0], filepath.Join(dir, ".github", "skills", "my-compress", "SKILL.md"))
+	// Second item is the resource.
+	assertTarget(t, items[1], filepath.Join(dir, ".github", "skills", "my-compress", "scripts", "run.py"))
+	assertContains(t, items[1].Content, "print('hello')")
 }
 
 func TestCopilotTarget_HardRules(t *testing.T) {
