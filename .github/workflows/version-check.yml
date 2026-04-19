@@ -60,3 +60,19 @@ jobs:
           fi
 
           echo "✓ Version bumped: $MAIN_VERSION → $PR_VERSION"
+
+      - name: Check version tag exists
+        run: |
+          set -euo pipefail
+
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          TAG="v${VERSION}"
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "✓ Tag $TAG exists"
+            exit 0
+          fi
+
+          echo "::error::Tag $TAG does not exist. Create it before merging:"
+          echo "  git tag $TAG && git push origin $TAG"
+          exit 1
