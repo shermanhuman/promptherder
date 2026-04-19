@@ -608,3 +608,67 @@ func TestAntigravityTarget_MigrationPrompt_DryRunSkips(t *testing.T) {
 		t.Error("dry-run should not create .agents/")
 	}
 }
+
+// TestAntigravityTarget_MigrationDoesNotBreakSourceResolution is a regression test
+// for the bug where migration renamed .promptherder/agent/ → .promptherder/agents/
+// but srcRoot was resolved before migration, causing a "no such file or directory" error.
+//
+// Not parallel: overrides package-level isInteractiveFunc and os.Stdin.
+func TestAntigravityTarget_MigrationDoesNotBreakSourceResolution(t *testing.T) {
+	dir := t.TempDir()
+
+	// Set up legacy source (.promptherder/agent/) with a file.
+	legacySrcDir := filepath.Join(dir, ".promptherder", "agent", "rules")
+	mustMkdir(t, legacySrcDir)
+	mustWrite(t, filepath.Join(legacySrcDir, "test-rule.md"), "# Rule\n")
+
+	// Set up legacy target (.agent/) to trigger migration.
+	legacyTargetDir := filepath.Join(dir, ".agent", "rules")
+	mustMkdir(t, legacyTargetDir)
+	mustWrite(t, filepath.Join(legacyTargetDir, "old-rule.md"), "# Old\n")
+
+	// Override isInteractiveFunc so migration prompt fires in test.
+	old := isInteractiveFunc
+	isInteractiveFunc = func() bool { return true }
+	defer func() { isInteractiveFunc = old }()
+
+	// Simulate user accepting migration by piping "y" to stdin.
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	w.WriteString("y\n")
+	w.Close()
+	os.Stdin = r
+	defer func() {
+		r.Close()
+		os.Stdin = oldStdin
+	}()
+
+	target := AntigravityTarget{}
+	cfg := TargetConfig{
+		RepoPath: dir,
+		Logger:   testLogger(t),
+	}
+
+	installed, err := target.Install(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Install should succeed after migration, got: %v", err)
+	}
+
+	// The rule file should be installed from the migrated source.
+	if len(installed) != 1 {
+		t.Fatalf("expected 1 file installed, got %d: %v", len(installed), installed)
+	}
+
+	targetFile := filepath.Join(dir, ".agents", "rules", "test-rule.md")
+	if _, err := os.Stat(targetFile); err != nil {
+		t.Error("test-rule.md should be installed to .agents/rules/ after migration")
+	}
+
+	// Legacy dirs should no longer exist.
+	if _, err := os.Stat(filepath.Join(dir, ".agent")); err == nil {
+		t.Error(".agent/ should have been renamed to .agents/")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".promptherder", "agent")); err == nil {
+		t.Error(".promptherder/agent/ should have been renamed to .promptherder/agents/")
+	}
+}
