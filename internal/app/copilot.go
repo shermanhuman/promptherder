@@ -26,6 +26,7 @@ const (
 	copilotTarget     = ".github/copilot-instructions.md"
 	copilotInstDir    = ".github/instructions"
 	copilotPromptsDir = ".github/prompts"
+	copilotSkillsDir  = ".github/skills"
 )
 
 // Config controls a sync run.
@@ -106,17 +107,23 @@ func (t CopilotTarget) Install(ctx context.Context, cfg TargetConfig) ([]string,
 		return written, err
 	}
 
-	// 3. Skills → .github/prompts/*.prompt.md.
-	skillItems, err := buildCopilotSkillPrompts(cfg.RepoPath)
+	if len(promptItems) > 0 {
+		cfg.Logger.Info("plan", "target", "copilot/prompts", "workflows", len(promptItems))
+	}
+	written, err = writeItems(ctx, cfg, promptItems, written)
 	if err != nil {
 		return written, err
 	}
-	promptItems = append(promptItems, skillItems...)
 
-	if len(promptItems) > 0 {
-		cfg.Logger.Info("plan", "target", "copilot/prompts", "workflows", len(promptItems)-len(skillItems), "skills", len(skillItems))
+	// 3. Skills → .github/skills/*/SKILL.md (Agent Skills format).
+	skillItems, err := buildCopilotAgentSkills(cfg.RepoPath)
+	if err != nil {
+		return written, err
 	}
-	written, err = writeItems(ctx, cfg, promptItems, written)
+	if len(skillItems) > 0 {
+		cfg.Logger.Info("plan", "target", "copilot/skills", "skills", len(skillItems))
+	}
+	written, err = writeItems(ctx, cfg, skillItems, written)
 	if err != nil {
 		return written, err
 	}
@@ -323,13 +330,21 @@ func buildCopilotPrompts(repoPath string, settings Settings) ([]planItem, error)
 	return plan, nil
 }
 
-// buildCopilotSkillPrompts reads skill files from .promptherder/agent/skills/*/
-// and converts them to .github/prompts/*.prompt.md for Copilot Chat.
+// internalSkills lists skills that should have user-invocable: false
+// because they are only auto-loaded by the model, never invoked directly.
+var internalSkills = map[string]bool{
+	"compound-v-persist":  true,
+	"compound-v-parallel": true,
+	"compound-v-verify":   true,
+}
+
+// buildCopilotAgentSkills reads skill files from .promptherder/agent/skills/*/
+// and converts them to .github/skills/*/SKILL.md (VS Code Agent Skills format).
 //
 // Each skill directory may contain a COPILOT.md (target-specific variant) or
 // SKILL.md (generic). COPILOT.md takes priority when present.
-// The directory name becomes the prompt file name (e.g., compound-v-tdd → compound-v-tdd.prompt.md).
-func buildCopilotSkillPrompts(repoPath string) ([]planItem, error) {
+// The directory name becomes the skill folder name.
+func buildCopilotAgentSkills(repoPath string) ([]planItem, error) {
 	skillsRoot := filepath.Join(repoPath, filepath.FromSlash(skillSourceDir))
 
 	if _, err := os.Stat(skillsRoot); os.IsNotExist(err) {
@@ -363,16 +378,105 @@ func buildCopilotSkillPrompts(repoPath string) ([]planItem, error) {
 			return nil, fmt.Errorf("read skill %s: %w", entry.Name(), err)
 		}
 
-		promptContent := convertWorkflowToPrompt(skillSourceDir, sourceLabel, data)
+		skillContent := convertToAgentSkill(entry.Name(), skillSourceDir, sourceLabel, data)
 
 		plan = append(plan, planItem{
-			Target:  filepath.Join(repoPath, filepath.FromSlash(copilotPromptsDir), entry.Name()+".prompt.md"),
-			Content: promptContent,
+			Target:  filepath.Join(repoPath, filepath.FromSlash(copilotSkillsDir), entry.Name(), "SKILL.md"),
+			Content: skillContent,
 			Sources: []string{entry.Name()},
 		})
+
+		// Copy resource files (anything that isn't SKILL.md, COPILOT.md, or other variant files).
+		resources, err := collectSkillResources(filepath.Join(skillsRoot, entry.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("collect resources for %s: %w", entry.Name(), err)
+		}
+		for _, res := range resources {
+			data, err := os.ReadFile(res.absPath)
+			if err != nil {
+				return nil, fmt.Errorf("read resource %s: %w", res.relPath, err)
+			}
+			plan = append(plan, planItem{
+				Target:  filepath.Join(repoPath, filepath.FromSlash(copilotSkillsDir), entry.Name(), res.relPath),
+				Content: data,
+				Sources: []string{entry.Name() + "/" + res.relPath},
+			})
+		}
 	}
 
 	return plan, nil
+}
+
+// skillResource represents a non-SKILL.md file in a skill directory.
+type skillResource struct {
+	absPath string
+	relPath string // relative to skill directory
+}
+
+// collectSkillResources finds all files in a skill directory that aren't
+// variant files (SKILL.md, COPILOT.md, ANTIGRAVITY.md, etc.).
+func collectSkillResources(skillDir string) ([]skillResource, error) {
+	var resources []skillResource
+
+	err := filepath.WalkDir(skillDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		rel, err := filepath.Rel(skillDir, path)
+		if err != nil {
+			return err
+		}
+		relSlash := filepath.ToSlash(rel)
+
+		// Skip variant files and README.
+		base := filepath.Base(path)
+		if _, isVariant := SkillVariantFiles[base]; isVariant {
+			return nil
+		}
+		if base == "SKILL.md" || base == "README.md" {
+			return nil
+		}
+
+		resources = append(resources, skillResource{
+			absPath: path,
+			relPath: relSlash,
+		})
+		return nil
+	})
+
+	return resources, err
+}
+
+// convertToAgentSkill transforms a skill source file into VS Code Agent Skills format.
+// Output has YAML frontmatter with name + description, and the body is the skill instructions.
+func convertToAgentSkill(name, sourceDir, sourceLabel string, data []byte) []byte {
+	_, body := parseFrontmatter(data)
+	desc := extractDescription(data)
+
+	// Strip Antigravity-specific annotations.
+	body = stripAntigravityAnnotations(body)
+
+	var buf bytes.Buffer
+	buf.WriteString("---\n")
+	buf.WriteString(fmt.Sprintf("name: %s\n", name))
+	if desc == "" {
+		desc = "Skill: " + name
+	}
+	buf.WriteString(fmt.Sprintf("description: %q\n", desc))
+	if internalSkills[name] {
+		buf.WriteString("user-invocable: false\n")
+	}
+	buf.WriteString("---\n")
+	buf.WriteString(fmt.Sprintf("<!-- Auto-generated by promptherder from %s/%s — do not edit -->\n\n",
+		sourceDir, sourceLabel))
+	buf.Write(bytes.TrimSpace(body))
+	buf.WriteByte('\n')
+
+	return buf.Bytes()
 }
 
 // convertWorkflowToPrompt transforms an Antigravity workflow or skill file
