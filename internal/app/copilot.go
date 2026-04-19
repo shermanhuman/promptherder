@@ -426,7 +426,10 @@ func collectSkillResources(skillDir string) ([]skillResource, error) {
 			return nil
 		}
 
-		rel, _ := filepath.Rel(skillDir, path)
+		rel, err := filepath.Rel(skillDir, path)
+		if err != nil {
+			return err
+		}
 		relSlash := filepath.ToSlash(rel)
 
 		// Skip variant files and README.
@@ -460,9 +463,10 @@ func convertToAgentSkill(name, sourceDir, sourceLabel string, data []byte) []byt
 	var buf bytes.Buffer
 	buf.WriteString("---\n")
 	buf.WriteString(fmt.Sprintf("name: %s\n", name))
-	if desc != "" {
-		buf.WriteString(fmt.Sprintf("description: %q\n", desc))
+	if desc == "" {
+		desc = "Skill: " + name
 	}
+	buf.WriteString(fmt.Sprintf("description: %q\n", desc))
 	if internalSkills[name] {
 		buf.WriteString("user-invocable: false\n")
 	}
