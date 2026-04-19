@@ -1,4 +1,4 @@
-name: Auto Tag on Merge
+name: Auto Tag and Release
 
 on:
   push:
@@ -10,29 +10,56 @@ permissions:
   contents: write
 
 jobs:
-  auto-tag:
-    name: Create Version Tag
+  auto-release:
+    name: Test, Tag, and Release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check if tag exists, create if missing
+      - name: Check if tag already exists
+        id: check
         run: |
           set -euo pipefail
-
           VERSION=$(tr -d '[:space:]' < VERSION)
           TAG="v${VERSION}"
-
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "✓ Tag $TAG already exists"
-            exit 0
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "✓ Tag $TAG already exists — skipping"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "Creating tag $TAG..."
+      - name: Set up Go
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Run tests
+        if: steps.check.outputs.exists == 'false'
+        run: go test ./...
+
+      - name: Create and push tag
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.check.outputs.tag }}"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
           echo "✓ Tag $TAG created and pushed"
+
+      - name: Run GoReleaser
+        if: steps.check.outputs.exists == 'false'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
