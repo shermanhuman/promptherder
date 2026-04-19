@@ -355,7 +355,7 @@ func TestMergeHerds_SkipsGitDir(t *testing.T) {
 	mustMkdir(t, filepath.Join(herdDir, ".git", "objects"))
 	mustWrite(t, filepath.Join(herdDir, "herd.json"), `{"name":"test-herd"}`)
 	mustWrite(t, filepath.Join(herdDir, "rules", "rule.md"), "# Rule\n")
-	mustWrite(t, filepath.Join(herdDir, ".git", "HEAD"), "ref: refs/heads/master\n")
+	mustWrite(t, filepath.Join(herdDir, ".git", "HEAD"), "ref: refs/heads/main\n")
 	mustWrite(t, filepath.Join(herdDir, ".git", "objects", "pack.idx"), "binary")
 
 	herds := []herdOnDisk{
