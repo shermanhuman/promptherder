@@ -28,6 +28,14 @@ type AntigravityTarget struct{}
 func (t AntigravityTarget) Name() string { return "antigravity" }
 
 func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]string, error) {
+	// Offer interactive migration if legacy target exists and new target does not.
+	// This must happen BEFORE resolving source paths, because migration renames
+	// .promptherder/agent/ → .promptherder/agents/. Note: migration may fire even
+	// when no source directory exists — that's intentional (renames .agent/ → .agents/).
+	if err := maybeMigrateLegacyTarget(cfg); err != nil {
+		cfg.Logger.Warn("migration failed (continuing)", "err", err)
+	}
+
 	// Resolve source: prefer new path, fall back to legacy.
 	srcRoot := filepath.Join(cfg.RepoPath, filepath.FromSlash(antigravitySource))
 	if _, err := os.Stat(srcRoot); os.IsNotExist(err) {
@@ -41,11 +49,6 @@ func (t AntigravityTarget) Install(ctx context.Context, cfg TargetConfig) ([]str
 	if _, err := os.Stat(srcRoot); os.IsNotExist(err) {
 		cfg.Logger.Debug("no source directory found", "dir", antigravitySource)
 		return nil, nil
-	}
-
-	// Offer interactive migration if legacy target exists and new target does not.
-	if err := maybeMigrateLegacyTarget(cfg); err != nil {
-		cfg.Logger.Warn("migration failed (continuing)", "err", err)
 	}
 
 	// Load manifest to check for generated files we must not overwrite.
@@ -174,7 +177,7 @@ func maybeMigrateLegacyTarget(cfg TargetConfig) error {
 	}
 
 	// Non-interactive or dry-run: skip silently with a log note.
-	if cfg.DryRun || !isInteractive() {
+	if cfg.DryRun || !isInteractiveFunc() {
 		cfg.Logger.Info("legacy .agent/ detected — run promptherder interactively to migrate to .agents/")
 		return nil
 	}
@@ -239,8 +242,9 @@ func maybeMigrateLegacyTarget(cfg TargetConfig) error {
 	return nil
 }
 
-// isInteractive returns true if stdin is connected to a terminal.
-func isInteractive() bool {
+// isInteractiveFunc checks if stdin is connected to a terminal.
+// It is a variable so tests can override it.
+var isInteractiveFunc = func() bool {
 	fi, err := os.Stdin.Stat()
 	if err != nil {
 		return false
