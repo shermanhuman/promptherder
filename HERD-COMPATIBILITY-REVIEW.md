@@ -10,13 +10,13 @@ Reviewed September 8, 2026 against the Promptherder 1.0.0 compiler. Companion ch
 | Slug selection chose the most recently edited unrelated task | Resolve the active context or a unique matching slug; preserve existing task dates |
 | Stack updates wrote generated Antigravity files | Author observed versions in `.promptherder/stack.md`; distinguish inventory from upgrades |
 | Added hard rules claimed immediate automatic enforcement | Sync configured output and report any pending sync or host reload |
-| Mandatory research, full tests after every step, and fixed concurrency created conflicting processes | Scale checks to actual impact, preserve required repository checks, and honor host capabilities |
+| Host-specific execution mechanics obscured the intended methodology | Retain mandatory research, batch checkpoints, full final test suite, templates, and ten review checks; translate tool mechanics and respect real dependencies |
 | Grugg reset normal mode and conflicted with review/PR formats | Latest style choice persists; artifact schemas, evidence, and meaningful uncertainty take precedence |
 | Grugg documented nonexistent environment/config activation | Remove unsupported runtime configuration claims; document explicit source overrides |
 | Compression overwrote source before validating, and repair exceptions left it changed | Validate in private staging, retain exact backup bytes, detect intervening edits, then replace atomically |
 | Compression silently selected Claude; validator accepted changed headings/paths/inline code | Require a local candidate or explicit provider; fail on protected structural changes |
 | Version preparation could tag/push and insisted on main/clean-tree approval | Separate metadata preparation from requested publishing; inspect actual version sources and CI |
-| MCP-first conflicted with unconditional gh/mise commands and global installs | Select available tools by coverage and project pins; global changes are not implicit recovery |
+| General MCP preference conflicted with the specific GitHub tooling rule | Keep mise-first policy; GitHub explicitly uses `mise exec -- gh`, while MCP-first applies to other operations |
 | API examples contained incorrect webhook placement, ignored HTTP failures, tuple/list misuse, and unbounded sync assumptions | Correct examples and scope verification; preserve dated sandbox observations as historical evidence |
 | Docker guidance claimed cached apk upgrades refresh packages | Document cache invalidation explicitly; remove assumptions about CI scanners and image automation |
 | Large API guides always loaded with the skill | Move focused guides and the unchanged Tekmetric catalog into referenced resources |
@@ -33,7 +33,7 @@ Reviewed September 8, 2026 against the Promptherder 1.0.0 compiler. Companion ch
 
 - All 25 skill entry points pass the skill-creator validator.
 - Twelve offline compression regressions cover failure, retries, protected content, exact backups, permissions, and concurrent edits.
-- Combined Codex/Claude compilation passes strict validation. All seven profiles compile with the documented duplicate-discovery and manual-invocation fallback warnings.
+- Combined Codex/Claude compilation passes strict validation with the restored, condensed policies at 7,967 bytes, under the 8 KiB quality target. All seven profiles compile with documented duplicate-discovery and manual-invocation fallback warnings.
 - Plan/apply hashes match. A selected, prefixed planning workflow includes its callable pipeline/execution/review dependency closure.
 - The relocated Tekmetric endpoint catalog is byte-for-byte identical to its prior tracked version.
 - Promptherder Go tests and vet pass, including the prefix/cache regression.
@@ -64,3 +64,7 @@ These transitions still need running-host trials, including compaction, to estab
 - [Claude CLI tool controls](https://code.claude.com/docs/en/cli-reference)
 
 WaxSeal's local command source was inspected for command shape and the sequence of remote/local writes. No secrets were retrieved or changed; no real email, phone call, release, or deployment was performed.
+
+## Repository policy preservation
+
+A second review restored concrete instructions that the initial alignment had over-generalized. Oh requires mise-first tooling, `mise exec -- gh`, version bumps before PRs, and human merging. Compound V retains its plan template, decision table, output formatting, detailed ten-check review, parallel batches, research, checkpoints, and final full-suite verification. Grugg retains its explicit terse default and intensity/persistence rules. Docker guidance retains the preferred Alpine strategy and concrete build recipe, with the cache-freshness correction. Reduced context size is not a reason to remove these policies; longer conditional checklists belong in referenced resources.
