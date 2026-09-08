@@ -156,7 +156,7 @@ func readTree(root, origin string) (map[string]Source, error) {
 		if err != nil {
 			return err
 		}
-		if entry.Name() == ".git" && entry.IsDir() {
+		if (entry.Name() == ".git" || entry.Name() == "__pycache__" || entry.Name() == ".pytest_cache") && entry.IsDir() {
 			return filepath.SkipDir
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
@@ -440,12 +440,26 @@ func loadContent(root string, opts Options, previous Manifest) (Content, error) 
 		}
 		seen[r.ID] = true
 	}
+	resolveID := func(id string) string {
+		if skills[id] != nil {
+			return id
+		}
+		if strings.HasPrefix(id, "workflow-") && skills[opts.CommandPrefix+id] != nil {
+			return opts.CommandPrefix + id
+		}
+		return id
+	}
 	for id, declaration := range declarations {
+		canonicalID := id
+		id = resolveID(id)
 		s, ok := skills[id]
 		if !ok {
 			return c, fmt.Errorf("declaration refers to missing skill %s", id)
 		}
-		s.Requires = declaration.Requires
+		s.Requires = make([]string, len(declaration.Requires))
+		for i, dependency := range declaration.Requires {
+			s.Requires[i] = resolveID(dependency)
+		}
 		switch declaration.Invocation {
 		case "":
 		case "manual":
@@ -457,7 +471,7 @@ func loadContent(root string, opts Options, previous Manifest) (Content, error) 
 		default:
 			return c, fmt.Errorf("invalid invocation policy %q for %s", declaration.Invocation, id)
 		}
-		for host, doc := range overlays[id] {
+		for host, doc := range overlays[canonicalID] {
 			if _, exists := s.Variants[host]; exists {
 				return c, fmt.Errorf("multiple %s overlays for %s", host, id)
 			}

@@ -380,3 +380,23 @@ func TestRecoveryReclaimsExitedProcess(t *testing.T) {
 		t.Fatal("stale lock retained")
 	}
 }
+
+func TestWorkflowDeclarationsHonorCommandPrefix(t *testing.T) {
+	root := t.TempDir()
+	base := ".promptherder/herds/demo/"
+	put(t, root, base+"herd.json", `{"name":"demo","skills":{"workflow-plan":{"requires":["helper"]}}}`)
+	put(t, root, base+"workflows/plan.md", "---\ndescription: Plan a task\n---\nUse helper.\n")
+	put(t, root, base+"skills/helper/SKILL.md", "---\nname: helper\ndescription: Help\n---\nBody\n")
+	put(t, root, base+"skills/helper/scripts/__pycache__/helper.pyc", "temporary interpreter cache")
+	p := plan(t, root, Options{Targets: []string{"codex", "claude"}, CommandPrefix: "cv-", Skills: []string{"cv-workflow-plan"}})
+	if p.HasErrors() {
+		t.Fatal(p.Diagnostics)
+	}
+	artifact(t, p, ".agents/skills/helper/SKILL.md")
+	artifact(t, p, ".claude/skills/cv-workflow-plan/SKILL.md")
+	for _, a := range p.Artifacts {
+		if strings.Contains(a.Path, "__pycache__") {
+			t.Fatal("bundled interpreter cache")
+		}
+	}
+}
