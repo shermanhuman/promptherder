@@ -19,9 +19,14 @@ func TestExtractSubcommand(t *testing.T) {
 		{"no subcommand", []string{"-dry-run", "-v"}, "", 2},
 		{"copilot subcommand", []string{"copilot", "-dry-run"}, "copilot", 1},
 		{"antigravity subcommand", []string{"antigravity", "-v"}, "antigravity", 1},
+		{"install subcommand", []string{"install", "codex", "claude"}, "install", 2},
+		{"target subcommand", []string{"target", "add", "codex"}, "target", 2},
+		{"agent alias", []string{"agent", "remove", "codex"}, "agent", 2},
 		{"pull subcommand", []string{"pull", "https://example.com/my-herd"}, "pull", 1},
 		{"unknown subcommand", []string{"unknown", "-v"}, "", 2},
 		{"empty args", []string{}, "", 0},
+		{"scope before command", []string{"--scope", "user", "install", "codex"}, "install", 3},
+		{"target value is not command", []string{"--targets", "codex", "plan"}, "plan", 2},
 	}
 
 	for _, tt := range tests {

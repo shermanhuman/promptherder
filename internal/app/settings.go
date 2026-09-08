@@ -20,9 +20,6 @@ var AllAgents = []string{
 	"cline",
 }
 
-// DefaultAgents are enabled when no explicit agents list is configured.
-var DefaultAgents = []string{"copilot", "antigravity"}
-
 // Settings holds user-configurable options from .promptherder/settings.json.
 type Settings struct {
 	// CommandPrefix is prepended to workflow/prompt output filenames.
@@ -33,8 +30,12 @@ type Settings struct {
 	CommandPrefixEnabled bool `json:"command_prefix_enabled"`
 
 	// Agents lists the enabled target agent names.
-	// Empty means DefaultAgents (copilot, antigravity).
-	Agents []string `json:"agents,omitempty"`
+	// Nil means setup has not run; an empty list explicitly enables no targets.
+	Agents []string `json:"agents"`
+	// Explicit source-path overrides and optional skill selection for native builds.
+	Overrides          []string `json:"overrides,omitempty"`
+	Skills             []string `json:"skills"`
+	ProjectDocMaxBytes int      `json:"project_doc_max_bytes,omitempty"`
 }
 
 // DefaultSettings returns the zero-value settings (all off).
@@ -43,13 +44,12 @@ func DefaultSettings() Settings {
 }
 
 // EnabledAgents returns the list of agents to sync.
-// Returns DefaultAgents if none are explicitly configured.
 func (s Settings) EnabledAgents() []string {
-	if len(s.Agents) == 0 {
-		return DefaultAgents
-	}
 	return s.Agents
 }
+
+// TargetsConfigured distinguishes first-time setup from an explicit empty selection.
+func (s Settings) TargetsConfigured() bool { return s.Agents != nil }
 
 // IsAgentEnabled returns true if the given agent name is in the enabled list.
 func (s Settings) IsAgentEnabled(name string) bool {
@@ -73,6 +73,9 @@ func IsValidAgent(name string) bool {
 
 // SaveSettings writes settings back to .promptherder/settings.json.
 func SaveSettings(repoPath string, s Settings) error {
+	if s.Agents == nil {
+		s.Agents = []string{}
+	}
 	path := filepath.Join(repoPath, manifestDir, settingsFile)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("create settings dir: %w", err)
@@ -103,6 +106,11 @@ func LoadSettings(repoPath string) (Settings, error) {
 	var s Settings
 	if err := json.Unmarshal(data, &s); err != nil {
 		return Settings{}, fmt.Errorf("parse settings %s: %w", path, err)
+	}
+	for _, name := range s.Agents {
+		if !IsValidAgent(name) {
+			return Settings{}, fmt.Errorf("unknown target %q in %s", name, path)
+		}
 	}
 
 	// Validate: empty prefix + enabled = treat as disabled.

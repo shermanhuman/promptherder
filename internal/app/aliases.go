@@ -12,6 +12,10 @@ import (
 const aliasesFile = "aliases.json"
 const aliasesSubdir = "promptherder"
 
+// Config directory lookup is replaceable so tests do not depend on the host OS
+// honoring XDG_CONFIG_HOME (macOS uses Application Support instead).
+var userConfigDir = os.UserConfigDir
+
 // Alias represents a named herd shortcut with one or more URLs.
 type Alias struct {
 	URLs        []string `json:"urls"`
@@ -40,7 +44,7 @@ var defaultAliases = AliasConfig{
 // AliasesConfigPath returns the full path to the aliases config file.
 // Returns empty string and error if the config directory cannot be determined.
 func AliasesConfigPath() (string, error) {
-	configDir, err := os.UserConfigDir()
+	configDir, err := userConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve config dir: %w", err)
 	}

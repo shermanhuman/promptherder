@@ -6,12 +6,58 @@ import (
 	"testing"
 )
 
-func TestEnabledAgents_DefaultsToLegacy(t *testing.T) {
+func TestEnabledAgents_NoDefaults(t *testing.T) {
 	t.Parallel()
 	s := Settings{}
 	agents := s.EnabledAgents()
-	if len(agents) != 2 || agents[0] != "copilot" || agents[1] != "antigravity" {
-		t.Errorf("expected default agents [copilot antigravity], got %v", agents)
+	if len(agents) != 0 {
+		t.Errorf("expected no default agents, got %v", agents)
+	}
+}
+
+func TestTargetSelectionState(t *testing.T) {
+	for _, tc := range []struct {
+		name, content       string
+		configured, wantErr bool
+	}{
+		{name: "missing file"},
+		{name: "legacy settings", content: `{"command_prefix":"v-"}`},
+		{name: "null", content: `{"agents":null}`},
+		{name: "explicit none", content: `{"agents":[]}`, configured: true},
+		{name: "explicit targets", content: `{"agents":["codex","claude"]}`, configured: true},
+		{name: "unknown target", content: `{"agents":["typo"]}`, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.content != "" {
+				mustMkdir(t, filepath.Join(dir, ".promptherder"))
+				mustWrite(t, filepath.Join(dir, ".promptherder", settingsFile), tc.content)
+			}
+			s, err := LoadSettings(dir)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error = %v", err)
+			}
+			if !tc.wantErr && s.TargetsConfigured() != tc.configured {
+				t.Fatalf("configured = %v", s.TargetsConfigured())
+			}
+			if !tc.configured && len(s.EnabledAgents()) != 0 {
+				t.Fatal("implicit defaults enabled")
+			}
+		})
+	}
+}
+
+func TestSaveEmptyTargetsStaysEmpty(t *testing.T) {
+	dir := t.TempDir()
+	if err := SaveSettings(dir, Settings{}); err != nil {
+		t.Fatal(err)
+	}
+	s, err := LoadSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.TargetsConfigured() || len(s.EnabledAgents()) != 0 {
+		t.Fatalf("empty selection did not persist: %#v", s)
 	}
 }
 

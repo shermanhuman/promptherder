@@ -4,12 +4,15 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/shermanhuman/promptherder/internal/compiler"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -38,7 +41,9 @@ func ResolveAndPull(ctx context.Context, arg string, cfg PullConfig) error {
 	}
 
 	// Auto-scaffold config file on first alias use.
-	EnsureAliasesConfig(source, cfg.Logger.Info)
+	if !cfg.DryRun {
+		EnsureAliasesConfig(source, cfg.Logger.Info)
+	}
 
 	// Resolve alias.
 	urls := ResolveAlias(arg, aliases)
@@ -64,6 +69,7 @@ func ResolveAndPull(ctx context.Context, arg string, cfg PullConfig) error {
 
 // PullConfig holds the configuration for a pull operation.
 type PullConfig struct {
+	Locked   bool         // Require the recorded immutable revision and content digest.
 	RepoPath string       // absolute path to the repo root
 	DryRun   bool         // if true, log what would happen but don't download
 	Logger   *slog.Logger // structured logger
@@ -75,7 +81,7 @@ type PullConfig struct {
 // No git binary required — uses net/http + archive/tar + compress/gzip.
 func Pull(ctx context.Context, gitURL string, cfg PullConfig) error {
 	name := herdNameFromURL(gitURL)
-	if name == "" {
+	if name == "" || name == "." || name == ".." {
 		return fmt.Errorf("cannot derive herd name from URL: %s", gitURL)
 	}
 
@@ -85,6 +91,22 @@ func Pull(ctx context.Context, gitURL string, cfg PullConfig) error {
 	}
 
 	archiveURL := toArchiveURL(owner, repo)
+	var locked compiler.HerdLock
+	if cfg.Locked {
+		data, err := os.ReadFile(filepath.Join(cfg.RepoPath, ".promptherder/lock.json"))
+		if err != nil {
+			return err
+		}
+		var locks map[string]compiler.HerdLock
+		if err := json.Unmarshal(data, &locks); err != nil {
+			return err
+		}
+		locked = locks[name]
+		if !regexp.MustCompile(`^[a-fA-F0-9]{40}$`).MatchString(locked.Revision) || locked.Repository != "https://github.com/"+owner+"/"+repo {
+			return fmt.Errorf("herd %s has no matching immutable revision in lock.json; pull and sync first", name)
+		}
+		archiveURL += "/" + locked.Revision
+	}
 	herdPath := filepath.Join(cfg.RepoPath, herdsDir, name)
 
 	if cfg.DryRun {
@@ -96,14 +118,30 @@ func Pull(ctx context.Context, gitURL string, cfg PullConfig) error {
 		return nil
 	}
 
-	// Remove existing herd dir for a clean re-download.
-	if isDirectory(herdPath) {
-		cfg.Logger.Info("updating herd (re-downloading)", "name", name)
-		if err := os.RemoveAll(herdPath); err != nil {
-			return fmt.Errorf("remove existing herd %s: %w", name, err)
+	revision := locked.Revision
+	if revision == "" {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+owner+"/"+repo+"/commits/HEAD", nil)
+		if err != nil {
+			return err
 		}
+		response, err := httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("resolve immutable herd revision: %w", err)
+		}
+		var commit struct {
+			SHA string `json:"sha"`
+		}
+		decodeErr := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&commit)
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return fmt.Errorf("resolve herd revision: HTTP %d", response.StatusCode)
+		}
+		if decodeErr != nil || !regexp.MustCompile(`^[a-fA-F0-9]{40}$`).MatchString(commit.SHA) {
+			return fmt.Errorf("GitHub returned an invalid immutable revision")
+		}
+		revision = commit.SHA
+		archiveURL += "/" + revision
 	}
-
 	cfg.Logger.Info("downloading herd", "name", name, "url", archiveURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
@@ -121,14 +159,68 @@ func Pull(ctx context.Context, gitURL string, cfg PullConfig) error {
 		return fmt.Errorf("download %s: HTTP %d", archiveURL, resp.StatusCode)
 	}
 
-	if err := extractTarGz(resp.Body, herdPath); err != nil {
+	parent := filepath.Dir(herdPath)
+	if err := os.MkdirAll(parent, 0755); err != nil {
+		return err
+	}
+	staging, err := os.MkdirTemp(filepath.Dir(parent), ".pull-")
+	if err != nil {
+		return err
+	}
+	keepBackup := false
+	defer func() {
+		if !keepBackup {
+			_ = os.RemoveAll(staging)
+		}
+	}()
+	download := filepath.Join(staging, "new")
+	if err := extractTarGz(resp.Body, download); err != nil {
 		return fmt.Errorf("extract herd %s: %w", name, err)
 	}
+	data, err := os.ReadFile(filepath.Join(download, herdMetaFile))
+	if err != nil {
+		return fmt.Errorf("herd %q has no readable %s: %w", name, herdMetaFile, err)
+	}
+	var meta struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return fmt.Errorf("invalid herd.json: %w", err)
+	}
 
-	// Validate herd.json exists.
-	metaPath := filepath.Join(herdPath, herdMetaFile)
-	if _, err := os.Stat(metaPath); os.IsNotExist(err) {
-		return fmt.Errorf("herd %q has no %s — is this a valid herd repository?", name, herdMetaFile)
+	sum, err := compiler.HerdDigest(download)
+	if err != nil {
+		return err
+	}
+	if cfg.Locked && sum != locked.Digest {
+		return fmt.Errorf("herd %s does not match locked content digest", name)
+	}
+	source, err := json.MarshalIndent(compiler.HerdLock{Repository: "https://github.com/" + owner + "/" + repo, Revision: revision, Version: meta.Version, Digest: sum}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(download, ".source.json"), source, 0644); err != nil {
+		return err
+	}
+	backup := filepath.Join(staging, "previous")
+	hadPrevious := false
+	if _, err := os.Lstat(herdPath); err == nil {
+		if err := os.Rename(herdPath, backup); err != nil {
+			return err
+		}
+		hadPrevious = true
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Rename(download, herdPath); err != nil {
+		if hadPrevious {
+			if restoreErr := os.Rename(backup, herdPath); restoreErr != nil {
+				keepBackup = true
+				return fmt.Errorf("install failed: %v; previous herd retained at %s: %w", err, backup, restoreErr)
+			}
+		}
+		return err
 	}
 
 	cfg.Logger.Info("herd ready", "name", name, "path", herdPath)
@@ -228,7 +320,11 @@ func extractTarGz(r io.Reader, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("mkdir parent %s: %w", target, err)
 			}
-			f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+			mode := os.FileMode(0644)
+			if hdr.Mode&0111 != 0 {
+				mode = 0755
+			}
+			f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 			if err != nil {
 				return fmt.Errorf("create %s: %w", target, err)
 			}
