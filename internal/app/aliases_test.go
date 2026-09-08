@@ -8,11 +8,13 @@ import (
 )
 
 func TestLoadAliases_MissingFile_ReturnsDefaults(t *testing.T) {
-	// Not parallel: uses t.Setenv.
+	// Not parallel: overrides userConfigDir.
 
 	// Set config dir to a temp dir with no aliases file.
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	original := userConfigDir
+	userConfigDir = func() (string, error) { return tmpDir, nil }
+	t.Cleanup(func() { userConfigDir = original })
 
 	aliases, source, err := LoadAliases()
 	if err != nil {
@@ -31,10 +33,12 @@ func TestLoadAliases_MissingFile_ReturnsDefaults(t *testing.T) {
 }
 
 func TestLoadAliases_UserFile_Overrides(t *testing.T) {
-	// Not parallel: uses t.Setenv.
+	// Not parallel: overrides userConfigDir.
 
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	original := userConfigDir
+	userConfigDir = func() (string, error) { return tmpDir, nil }
+	t.Cleanup(func() { userConfigDir = original })
 
 	// Write a custom aliases file.
 	configDir := filepath.Join(tmpDir, aliasesSubdir)
@@ -70,10 +74,12 @@ func TestLoadAliases_UserFile_Overrides(t *testing.T) {
 }
 
 func TestLoadAliases_MalformedJSON_ReturnsError(t *testing.T) {
-	// Not parallel: uses t.Setenv.
+	// Not parallel: overrides userConfigDir.
 
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	original := userConfigDir
+	userConfigDir = func() (string, error) { return tmpDir, nil }
+	t.Cleanup(func() { userConfigDir = original })
 
 	configDir := filepath.Join(tmpDir, aliasesSubdir)
 	if err := os.MkdirAll(configDir, 0755); err != nil {

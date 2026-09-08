@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/shermanhuman/promptherder/internal/app"
+	"github.com/shermanhuman/promptherder/internal/compiler"
 )
 
 // Set via ldflags at build time (goreleaser).
@@ -62,15 +64,25 @@ func main() {
 	// Parse flags.
 	fs := flag.NewFlagSet("promptherder", flag.ExitOnError)
 	var (
-		includeCSV  string
-		dryRun      bool
-		verbose     bool
-		showVersion bool
+		scope                                         string
+		includeCSV                                    string
+		dryRun                                        bool
+		verbose                                       bool
+		showVersion                                   bool
+		targetsCSV                                    string
+		strict, adopt, updateLock, jsonOutput, locked bool
 	)
 	fs.StringVar(&includeCSV, "include", "", "Comma-separated glob patterns to include (default: all)")
 	fs.BoolVar(&dryRun, "dry-run", false, "Show actions without writing files")
 	fs.BoolVar(&verbose, "v", false, "Verbose logging")
 	fs.BoolVar(&showVersion, "version", false, "Print version and exit")
+	fs.StringVar(&scope, "scope", "repository", "Installation scope: repository or user (Codex/Claude)")
+	fs.StringVar(&targetsCSV, "targets", "", "Targets for plan/check/doctor/explain (comma-separated)")
+	fs.BoolVar(&locked, "locked", false, "Pull the exact revision from lock.json")
+	fs.BoolVar(&strict, "strict", false, "Treat compatibility warnings as errors")
+	fs.BoolVar(&adopt, "adopt", false, "Adopt legacy output; preserve unmanaged baseline instructions")
+	fs.BoolVar(&updateLock, "update-lock", false, "Accept reviewed changes to herd content")
+	fs.BoolVar(&jsonOutput, "json", false, "Print the build plan as JSON")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `promptherder — sync agent configuration across AI coding tools
@@ -78,31 +90,46 @@ func main() {
 Usage:
   promptherder [flags]              Sync all enabled targets
   promptherder <target> [flags]     Sync a single target
+  promptherder install [name...]   Select targets (use none to disable all)
   promptherder pull <name|git-url>  Install a herd (by alias or URL)
   promptherder list                 Show available herd aliases
-  promptherder agent list           Show available/enabled targets
-  promptherder agent add <name>     Enable a target
-  promptherder agent remove <name>  Disable a target
+  promptherder target list          Show available/enabled targets
+  promptherder target add <name>    Enable targets
+  promptherder target remove <name> Disable targets
+  promptherder agent ...            Alias for target ...
+  promptherder plan                 Preview native output and compatibility diagnostics
+  promptherder check                Validate sources and planned output (no writes)
+  promptherder doctor               Inspect planned and installed instruction discovery
+  promptherder explain <skill-id>   Trace a skill or rule to its outputs
+  promptherder recover              Roll back an interrupted sync
 
 Targets:
-  copilot       .github/copilot-instructions.md + .github/prompts/
-  antigravity   .agents/ (Gemini CLI)
-  claude        CLAUDE.md (Claude Code)
-  codex         AGENTS.md (OpenAI Codex)
-  cursor        .cursor/rules/promptherder.md
-  windsurf      .windsurf/rules/promptherder.md
-  cline         .clinerules/promptherder.md
+  codex         AGENTS.md + .agents/skills/
+  claude        CLAUDE.md + .claude/rules/ + .claude/skills/
+  copilot       AGENTS.md + .github/instructions/ + native skills
+  antigravity   .agents/rules/ + .agents/skills/
+  cursor        AGENTS.md + .cursor/rules/*.mdc + native skills
+  windsurf      .windsurf/rules/ + .windsurf/skills/
+  cline         AGENTS.md + .clinerules/ + .cline/skills/
 
 Flags:
   -dry-run     Show actions without writing files
   -include     Comma-separated glob patterns to include (default: all)
   -v           Verbose logging (structured output to stderr)
   -version     Print version and exit
+  -scope       repository (default) or user (Codex/Claude)
+  -targets     Comma-separated targets for read-only plan/diagnostic commands
+  -strict      Treat compatibility warnings as errors
+  -adopt       Adopt legacy files or merge an unmanaged baseline (preview with plan)
+  -locked      Pull the exact revision and verify its content digest
+  -update-lock Accept reviewed herd changes
+  -json        Print a machine-readable plan
 
 Examples:
   promptherder                                Sync all enabled targets
-  promptherder agent add claude cursor        Enable claude and cursor
-  promptherder agent remove copilot           Disable copilot
+  promptherder install codex claude           Select Codex and Claude Code
+  promptherder target add cursor              Enable Cursor
+  promptherder target remove cursor           Disable Cursor
   promptherder pull compound-v                Pull by alias
   promptherder copilot -dry-run               Preview copilot sync
 `)
@@ -133,7 +160,7 @@ Examples:
 		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	} else {
 		// Normal: pretty output to stdout.
-		logger = slog.New(app.NewUIHandler(os.Stdout, level))
+		logger = slog.New(app.NewUIHandler(os.Stderr, level))
 	}
 
 	// Always use current working directory as repo root.
@@ -143,6 +170,21 @@ Examples:
 		os.Exit(1)
 	}
 
+	if scope != "repository" && scope != "user" {
+		logger.Error("scope must be repository or user")
+		os.Exit(2)
+	}
+	if scope == "user" {
+		cwd, err = os.UserHomeDir()
+		if err != nil {
+			logger.Error("cannot resolve user home", "error", err)
+			os.Exit(1)
+		}
+		if custom := os.Getenv("CODEX_HOME"); custom != "" && custom != cwd+"/.codex" {
+			logger.Error("user scope requires the default CODEX_HOME; custom layouts are not supported")
+			os.Exit(2)
+		}
+	}
 	cfg := app.Config{
 		RepoPath: cwd,
 		Include:  parseIncludePatterns(includeCSV),
@@ -150,38 +192,108 @@ Examples:
 		Logger:   logger,
 	}
 
-	// Build the full targets registry.
-	targetRegistry := map[string]app.Target{
-		"copilot":     app.CopilotTarget{Include: cfg.Include},
-		"antigravity": app.AntigravityTarget{},
-		"claude":      app.NewClaudeTarget(cfg.Include),
-		"codex":       app.NewCodexTarget(cfg.Include),
-		"cursor":      app.NewCursorTarget(cfg.Include),
-		"windsurf":    app.NewWindsurfTarget(cfg.Include),
-		"cline":       app.NewClineTarget(cfg.Include),
-	}
-
 	// Load settings for agent filtering.
 	settings, settingsErr := app.LoadSettings(cwd)
 	if settingsErr != nil {
-		logger.Warn("failed to load settings, using defaults", "error", settingsErr)
-		settings = app.DefaultSettings()
+		logger.Error("failed to load settings", "error", settingsErr)
+		os.Exit(1)
 	}
 
 	var runErr error
-	switch subcommand {
-	case "":
-		// Bare promptherder — discover herds, merge, then fan out to enabled targets.
-		var enabled []app.Target
-		for _, name := range settings.EnabledAgents() {
-			if t, ok := targetRegistry[name]; ok {
-				enabled = append(enabled, t)
+	build := func(targets []string, write bool, explain string) error {
+		prefix := ""
+		if settings.CommandPrefixEnabled {
+			prefix = settings.CommandPrefix
+		}
+		p, err := compiler.Build(ctx, cwd, compiler.Options{Scope: scope, Targets: targets, Include: cfg.Include, Overrides: settings.Overrides, Skills: settings.Skills, CommandPrefix: prefix, Strict: strict, Adopt: adopt, UpdateLock: updateLock, ProjectDocMaxBytes: settings.ProjectDocMaxBytes})
+		if err != nil {
+			return err
+		}
+		if subcommand == "doctor" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			if err := p.Doctor(home, os.Getenv("CODEX_HOME")); err != nil {
+				return err
 			}
 		}
-		runErr = app.RunAll(ctx, enabled, cfg)
+		if explain != "" && !p.Explains(explain) {
+			return fmt.Errorf("unknown or unselected content ID %q", explain)
+		}
+		if jsonOutput {
+			data, err := json.MarshalIndent(p, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(data))
+		} else {
+			p.Print(os.Stdout, explain)
+		}
+		if p.HasErrors() {
+			return fmt.Errorf("resolve the reported plan errors before syncing")
+		}
+		if write && !dryRun {
+			return p.Apply(ctx)
+		}
+		return nil
+	}
+	if locked && subcommand != "pull" {
+		logger.Error("--locked is only supported for pull")
+		os.Exit(2)
+	}
+	if targetsCSV != "" && subcommand != "plan" && subcommand != "check" && subcommand != "doctor" && subcommand != "explain" {
+		logger.Error("--targets is only supported for plan/check/doctor/explain; use install to change enabled targets")
+		os.Exit(2)
+	}
+	switch subcommand {
+	case "":
+		if len(allPositional) != 0 {
+			runErr = fmt.Errorf("unexpected arguments: %s", strings.Join(allPositional, " "))
+			break
+		}
+		if !settings.TargetsConfigured() {
+			settings, runErr = configureTargets(cwd, settings, nil, dryRun, stdinInteractive(), os.Stdin, os.Stdout, scope)
+			if runErr != nil {
+				break
+			}
+		}
+		runErr = build(settings.EnabledAgents(), true, "")
 
 	case "copilot", "antigravity", "claude", "codex", "cursor", "windsurf", "cline":
-		runErr = app.RunTarget(ctx, targetRegistry[subcommand], cfg)
+		var targets []string
+		targets, runErr = compiler.InstalledTargets(cwd)
+		if runErr == nil {
+			targets, runErr = changeTargets(targets, "add", []string{subcommand})
+		}
+		if runErr == nil {
+			runErr = build(targets, true, "")
+		}
+
+	case "plan", "check", "doctor", "explain":
+		targets := settings.EnabledAgents()
+		if targetsCSV != "" {
+			targets = parseIncludePatterns(targetsCSV)
+		}
+		id := ""
+		if subcommand == "explain" {
+			if len(allPositional) != 1 {
+				runErr = fmt.Errorf("usage: promptherder explain <skill-or-rule-id>")
+				break
+			}
+			id = allPositional[0]
+		}
+		runErr = build(targets, false, id)
+
+	case "recover":
+		if dryRun {
+			runErr = fmt.Errorf("recover does not support --dry-run; use plan to inspect pending recovery")
+			break
+		}
+		runErr = compiler.Recover(cwd)
+
+	case "install":
+		_, runErr = configureTargets(cwd, settings, allPositional, dryRun, stdinInteractive(), os.Stdin, os.Stdout, scope)
 
 	case "pull":
 		var gitURL string
@@ -193,7 +305,13 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Usage: promptherder pull <name|git-url>\n")
 			os.Exit(2)
 		}
-		runErr = app.ResolveAndPull(ctx, gitURL, app.PullConfig{
+		if !settings.TargetsConfigured() {
+			settings, runErr = configureTargets(cwd, settings, nil, dryRun, stdinInteractive(), os.Stdin, os.Stdout, scope)
+			if runErr != nil {
+				break
+			}
+		}
+		runErr = app.ResolveAndPull(ctx, gitURL, app.PullConfig{Locked: locked,
 			RepoPath: cwd,
 			DryRun:   dryRun,
 			Logger:   logger,
@@ -207,8 +325,10 @@ Examples:
 		}
 
 		// Auto-scaffold config on first list.
-		if path := app.EnsureAliasesConfig(source, nil); path != "" {
-			fmt.Fprintf(os.Stderr, "Created %s\n\n", path)
+		if !dryRun {
+			if path := app.EnsureAliasesConfig(source, nil); path != "" {
+				fmt.Fprintf(os.Stderr, "Created %s\n\n", path)
+			}
 		}
 
 		fmt.Println("\nAvailable herds:")
@@ -224,9 +344,9 @@ Examples:
 		}
 		fmt.Println("Pull:   promptherder pull <name>")
 
-	case "agent":
+	case "agent", "target":
 		if len(allPositional) == 0 {
-			fmt.Fprintf(os.Stderr, "Usage: promptherder agent <list|add|remove> [name...]\n")
+			fmt.Fprintf(os.Stderr, "Usage: promptherder target <list|add|remove> [name...]\n")
 			os.Exit(2)
 		}
 		agentCmd := allPositional[0]
@@ -242,90 +362,49 @@ Examples:
 				enabledSet[a] = true
 			}
 			for _, name := range app.AllAgents {
-				t := targetRegistry[name]
+				if scope == "user" && name != "codex" && name != "claude" {
+					continue
+				}
 				check := " "
 				suffix := ""
 				if enabledSet[name] {
 					check = "✓"
 					suffix = " (enabled)"
 				}
-				_ = t // target exists in registry
 				fmt.Printf("  %s %-14s%s\n", check, name, suffix)
 			}
 			fmt.Println()
-			fmt.Println("Enable:  promptherder agent add <name>")
-			fmt.Println("Disable: promptherder agent remove <name>")
+			if !settings.TargetsConfigured() {
+				fmt.Println("No targets selected. Run 'promptherder install' to set up this repository.")
+			} else if len(enabled) == 0 {
+				fmt.Println("No targets enabled.")
+			}
+			fmt.Println("Enable:  promptherder target add <name>")
+			fmt.Println("Disable: promptherder target remove <name>")
 
-		case "add":
-			if len(agentArgs) == 0 {
-				fmt.Fprintf(os.Stderr, "Usage: promptherder agent add <name> [name...]\n")
-				os.Exit(2)
-			}
-			// Validate all names first.
-			for _, name := range agentArgs {
-				if !app.IsValidAgent(name) {
-					fmt.Fprintf(os.Stderr, "Unknown agent: %s\nAvailable: %s\n", name, strings.Join(app.AllAgents, ", "))
-					os.Exit(2)
+		case "add", "remove":
+			var selected []string
+			selected, runErr = changeTargets(settings.EnabledAgents(), agentCmd, agentArgs)
+			if runErr == nil && scope == "user" {
+				for _, name := range selected {
+					if name != "codex" && name != "claude" {
+						runErr = fmt.Errorf("user scope supports codex and claude only")
+					}
 				}
 			}
-			// Start from current enabled list.
-			current := settings.EnabledAgents()
-			have := make(map[string]bool, len(current))
-			for _, a := range current {
-				have[a] = true
+			if runErr == nil {
+				settings.Agents = selected
+				runErr = persistTargets(cwd, settings, dryRun, os.Stdout)
 			}
-			for _, name := range agentArgs {
-				if !have[name] {
-					current = append(current, name)
-					have[name] = true
-					fmt.Printf("  ✓ added %s\n", name)
-				} else {
-					fmt.Printf("  · %s already enabled\n", name)
-				}
-			}
-			settings.Agents = current
-			if err := app.SaveSettings(cwd, settings); err != nil {
-				logger.Error("failed to save settings", "error", err)
-				os.Exit(1)
-			}
-			fmt.Println("\nRun 'promptherder' to sync.")
-
-		case "remove":
-			if len(agentArgs) == 0 {
-				fmt.Fprintf(os.Stderr, "Usage: promptherder agent remove <name> [name...]\n")
-				os.Exit(2)
-			}
-			removeSet := make(map[string]bool, len(agentArgs))
-			for _, name := range agentArgs {
-				if !app.IsValidAgent(name) {
-					fmt.Fprintf(os.Stderr, "Unknown agent: %s\nAvailable: %s\n", name, strings.Join(app.AllAgents, ", "))
-					os.Exit(2)
-				}
-				removeSet[name] = true
-			}
-			var remaining []string
-			for _, a := range settings.EnabledAgents() {
-				if !removeSet[a] {
-					remaining = append(remaining, a)
-				} else {
-					fmt.Printf("  ✓ removed %s\n", a)
-				}
-			}
-			settings.Agents = remaining
-			if err := app.SaveSettings(cwd, settings); err != nil {
-				logger.Error("failed to save settings", "error", err)
-				os.Exit(1)
-			}
-			fmt.Println("\nRun 'promptherder' to sync.")
 
 		default:
-			fmt.Fprintf(os.Stderr, "Unknown agent command: %s\nUsage: promptherder agent <list|add|remove> [name...]\n", agentCmd)
+			fmt.Fprintf(os.Stderr, "Unknown agent command: %s\nUsage: promptherder target <list|add|remove> [name...]\n", agentCmd)
 			os.Exit(2)
 		}
 
 	default:
 		logger.Error("unknown subcommand", "subcommand", subcommand)
-		fmt.Fprintf(os.Stderr, "Usage: promptherder [<target>|pull|list|agent] [flags]\n")
+		fmt.Fprintf(os.Stderr, "Usage: promptherder [<target>|install|pull|list|target] [flags]\n")
 		os.Exit(2)
 	}
 
@@ -353,9 +432,25 @@ func extractSubcommand(args []string) (string, []string) {
 		"pull":        true,
 		"list":        true,
 		"agent":       true,
+		"target":      true,
+		"install":     true,
+		"plan":        true, "check": true, "doctor": true, "explain": true, "recover": true,
 	}
-	if len(args) > 0 && known[args[0]] {
-		return args[0], args[1:]
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			name := strings.TrimLeft(arg, "-")
+			if name == "include" || name == "targets" || name == "scope" {
+				i++
+			}
+			continue
+		}
+		if known[arg] {
+			remaining := append([]string{}, args[:i]...)
+			remaining = append(remaining, args[i+1:]...)
+			return arg, remaining
+		}
+		break
 	}
 	return "", args
 }
@@ -390,7 +485,7 @@ func splitFlagsAndArgs(args []string) (flags, positional []string) {
 			if !strings.Contains(a, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				// Check if this flag looks like it takes a value (e.g. -include).
 				name := strings.TrimLeft(a, "-")
-				if name == "include" { // known value flags
+				if name == "include" || name == "targets" || name == "scope" { // known value flags
 					i++
 					flags = append(flags, args[i])
 				}
@@ -400,4 +495,16 @@ func splitFlagsAndArgs(args []string) (flags, positional []string) {
 		}
 	}
 	return flags, positional
+}
+
+// Setup is offered only on an interactive first run; automation must select
+// targets explicitly rather than inheriting an implicit default.
+func stdinInteractive() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	// /dev/null is also a character device, but cannot answer a setup prompt.
+	null, err := os.Stat(os.DevNull)
+	return err != nil || !os.SameFile(info, null)
 }
