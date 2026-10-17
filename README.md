@@ -1,5 +1,8 @@
 # promptherder
 
+> [!WARNING]
+> **Retired (October 2026).** Promptherder is no longer maintained, and this repository is archived. Its herds became Claude Code and Codex plugins: install [Compound V](https://github.com/shermanhuman/compound-v) and the plugins its marketplace lists (`claude plugin marketplace add shermanhuman/compound-v`, or `codex plugin marketplace add shermanhuman/compound-v`). To move a repository that used Promptherder, follow [Compound V's upgrade notes](https://github.com/shermanhuman/compound-v/blob/main/docs/upgrading-from-1x.md). The published releases still install (v1.0.2, the final tag, adds only this notice), and the history below is kept as it was.
+
 Write shared coding instructions once and compile them into native host rules and skill bundles. Codex and Claude Code are the primary integration targets; no target is enabled by default.
 
 Version **1.0.0** replaces flattened prompt exports with a validated build plan. Everyday rules stay in a small baseline. Skill bodies, references, assets, and executable scripts remain in native skill directories and load when needed.
