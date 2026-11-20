@@ -33,4 +33,4 @@ Compiler tests cover real parser failures, bundle copying, modes, dependency clo
 
 For integration checks, copy herds into a temporary project's `.promptherder/herds/`, select targets explicitly, compare `plan --json` with installed artifacts, run sync twice, and remove targets. Avoid modifying actual user host configuration during tests.
 
-Release versions are stored in `VERSION` and injected by GoReleaser. The 1.0.0 major bump covers native output layouts, explicit target setup, namespaced workflow invocation, conflict handling, and manifest/lock changes. Publishing a release is a separate action.
+Release versions are stored in `VERSION` and injected by GoReleaser. The 1.0.0 major bump covers native output layouts, explicit target setup, namespaced workflow invocation, conflict handling, and manifest/lock changes. Merging a `VERSION` change to main tags and publishes through `auto-tag.yml`.
